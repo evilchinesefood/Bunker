@@ -1,23 +1,29 @@
-import type { GameState, ResourceId, StatId } from '../State/GameState'
+import type { GameState, ResourceId, StatId, Dweller } from '../State/GameState'
 import {
   FOOD_PER_TICK,
-  POWER_PER_TICK,
   WATER_PER_TICK,
   XP_PER_TICK,
   XP_TO_STAT,
   OFFLINE_CAP_MS,
+  OFFLINE_XP_DAMPING,
   TICKS_PER_DAY,
   CHILD_TO_ADULT_DAYS,
-  PREGNANCY_TICKS,
 } from '../State/GameState'
 import { ROOM_CATALOG } from '../Domain/Rooms'
 import { inheritedStats, generateName, makeDweller } from '../Domain/Dwellers'
-import { pushLog, housingCap } from '../State/Reducers'
+import { pushLog } from '../State/Reducers'
+import { populationCap } from './Pregnancy'
+import { resolveOfflineFires } from './Events'
+
+const OFFLINE_HP_PER_TICK = 0.15
+const OFFLINE_HAPPY_PER_TICK = 0.4
+const SHORTAGE_GRACE_TICKS = 30
 
 export interface OfflineSummary {
   elapsedMs: number
   ticks: number
   births: number
+  deaths: number
   gains: Partial<Record<ResourceId, number>>
   capsGain: number
 }
@@ -30,39 +36,81 @@ export function runOfflineCatchup(state: GameState): OfflineSummary | null {
     return null
   }
   const ticks = Math.floor(elapsedMs / 1000)
-  const summary: OfflineSummary = { elapsedMs, ticks, births: 0, gains: {}, capsGain: 0 }
+  const summary: OfflineSummary = {
+    elapsedMs,
+    ticks,
+    births: 0,
+    deaths: 0,
+    gains: {},
+    capsGain: 0,
+  }
 
-  const n = state.dwellers.length
   const prod: Record<ResourceId, number> = { power: 0, water: 0, food: 0 }
   let capsPerTick = 0
-
   for (const room of state.rooms) {
-    if (room.assigned.length === 0) continue
-    if (room.hp <= 0) continue
+    if (room.assigned.length === 0 || room.hp <= 0) continue
     const type = ROOM_CATALOG[room.typeId]
     if (!type.produces) continue
     const affStat = type.affinity
-    const aff = affStat
-      ? room.assigned.reduce((s: number, id) => {
-          const d = state.dwellers.find(x => x.id === id)
-          return s + (d ? d.stats[affStat] : 0)
-        }, 0)
-      : room.assigned.length * 5
-    const amt = type.baseProduction * room.level * aff
+    let sum = 0
+    if (affStat) {
+      for (const id of room.assigned) {
+        const d = state.dwellers.find(x => x.id === id)
+        if (d) sum += d.stats[affStat]
+      }
+    } else {
+      sum = room.assigned.length * 5
+    }
+    const avg = sum / room.assigned.length
+    const amt = type.baseProduction * room.level * avg * room.assigned.length
     if (type.produces === 'caps') capsPerTick += amt
     else prod[type.produces] += amt
   }
 
-  const consumption: Record<ResourceId, number> = {
-    power: n * POWER_PER_TICK,
+  const n = state.dwellers.length
+  const cons: Record<ResourceId, number> = {
+    power: 0,
     water: n * WATER_PER_TICK,
     food: n * FOOD_PER_TICK,
   }
 
-  for (const res of ['power', 'water', 'food'] as ResourceId[]) {
-    const net = (prod[res] - consumption[res]) * ticks
+  const shortageTicks: Record<ResourceId, number> = { power: 0, water: 0, food: 0 }
+  for (const res of ['water', 'food'] as ResourceId[]) {
+    const net = prod[res] - cons[res]
+    let remaining = ticks
+    let current = state.resources[res]
+    const cap = state.resourceCaps[res]
+    let runoutTicks = 0
+
+    if (net >= 0) {
+      const toCap = cap - current
+      const ticksToFill = net > 0 ? Math.min(remaining, Math.floor(toCap / net)) : 0
+      current += net * ticksToFill
+      remaining -= ticksToFill
+      current = Math.min(cap, current)
+    } else {
+      const ticksToEmpty = current / -net
+      if (ticksToEmpty < remaining) {
+        runoutTicks = remaining - Math.floor(ticksToEmpty)
+        current = 0
+      } else {
+        current += net * remaining
+        remaining = 0
+      }
+    }
+
     const before = state.resources[res]
-    state.resources[res] = clamp(before + net, 0, state.resourceCaps[res])
+    state.resources[res] = Math.max(0, Math.min(cap, current))
+    const gain = state.resources[res] - before
+    if (gain !== 0) summary.gains[res] = gain
+    shortageTicks[res] = runoutTicks
+  }
+
+  {
+    const res: ResourceId = 'power'
+    const netPower = prod[res]
+    const before = state.resources[res]
+    state.resources[res] = Math.min(state.resourceCaps[res], before + netPower * ticks)
     const gain = state.resources[res] - before
     if (gain !== 0) summary.gains[res] = gain
   }
@@ -79,10 +127,11 @@ export function runOfflineCatchup(state: GameState): OfflineSummary | null {
       target = type.affinity
     }
     if (!target) continue
+    const gain = XP_PER_TICK * room.level * ticks * OFFLINE_XP_DAMPING
     for (const id of room.assigned) {
       const d = state.dwellers.find(x => x.id === id)
       if (!d || d.stats[target] >= 10) continue
-      d.xp[target] += XP_PER_TICK * room.level * ticks
+      d.xp[target] += gain
       while (d.xp[target] >= XP_TO_STAT && d.stats[target] < 10) {
         d.xp[target] -= XP_TO_STAT
         d.stats[target] += 1
@@ -90,13 +139,48 @@ export function runOfflineCatchup(state: GameState): OfflineSummary | null {
     }
   }
 
+  const totalShortageTicks = shortageTicks.water + shortageTicks.food
+  const maxShortageStream = Math.max(shortageTicks.water, shortageTicks.food)
+  const penaltyTicks = Math.max(0, maxShortageStream - SHORTAGE_GRACE_TICKS)
+  const happyPressure =
+    shortageTicks.water > 0 && shortageTicks.food > 0 ? 2 : totalShortageTicks > 0 ? 1 : 0
+  const happyDelta =
+    -OFFLINE_HAPPY_PER_TICK * Math.min(maxShortageStream, ticks) * happyPressure * 0.1
+  const toRemove: string[] = []
+  for (const d of state.dwellers) {
+    d.happiness = clamp(d.happiness + happyDelta, 0, 100)
+    if (penaltyTicks > 0) {
+      const shortageCount = (shortageTicks.water > 0 ? 1 : 0) + (shortageTicks.food > 0 ? 1 : 0)
+      const hpLoss = OFFLINE_HP_PER_TICK * penaltyTicks * shortageCount * (11 - d.stats.end) * 0.1
+      d.hp = clamp(d.hp - hpLoss, 0, 100)
+      if (d.hp <= 0) {
+        toRemove.push(d.id)
+        pushLog(state, `${d.name} did not survive the shortage.`, 'bad')
+        summary.deaths += 1
+      }
+    }
+  }
+  if (toRemove.length) {
+    const dead = new Set(toRemove)
+    for (const d of state.dwellers) {
+      if (d.partnerId && dead.has(d.partnerId)) d.partnerId = null
+    }
+    for (const r of state.rooms) r.assigned = r.assigned.filter(id => !dead.has(id))
+    state.dwellers = state.dwellers.filter(x => !dead.has(x.id))
+    state.pregnancies = state.pregnancies.filter(
+      p => !dead.has(p.motherId) && !dead.has(p.fatherId),
+    )
+  }
+
+  const dById = new Map<string, Dweller>()
+  for (const d of state.dwellers) dById.set(d.id, d)
   const remaining = []
   for (const p of state.pregnancies) {
     p.ticksRemaining -= ticks
     if (p.ticksRemaining <= 0) {
-      const mom = state.dwellers.find(d => d.id === p.motherId)
-      const dad = state.dwellers.find(d => d.id === p.fatherId)
-      if (mom && dad && state.dwellers.length < housingCap(state)) {
+      const mom = dById.get(p.motherId)
+      const dad = dById.get(p.fatherId)
+      if (mom && dad && state.dwellers.length < populationCap(state)) {
         const child = makeDweller(state, {
           name: generateName(state),
           stats: inheritedStats(state, mom, dad),
@@ -105,8 +189,14 @@ export function runOfflineCatchup(state: GameState): OfflineSummary | null {
           status: 'idle',
         })
         state.dwellers.push(child)
+        dById.set(child.id, child)
         mom.status = 'idle'
         summary.births += 1
+        if (!state.milestones.includes('first_birth')) {
+          state.milestones.push('first_birth')
+        }
+      } else if (mom) {
+        mom.status = 'idle'
       }
     } else {
       remaining.push(p)
@@ -117,17 +207,14 @@ export function runOfflineCatchup(state: GameState): OfflineSummary | null {
     for (const d of state.dwellers) if (d.status === 'pregnant') d.status = 'idle'
   }
 
+  resolveOfflineFires(state, ticks)
+
   const daysPassed = Math.floor(ticks / TICKS_PER_DAY)
   if (daysPassed > 0) {
     for (const d of state.dwellers) {
       d.ageDays += daysPassed
       if (d.isChild && d.ageDays >= CHILD_TO_ADULT_DAYS) d.isChild = false
     }
-  }
-
-  const happyDrift = summary.gains.food === undefined ? 0 : -1
-  for (const d of state.dwellers) {
-    d.happiness = clamp(d.happiness + happyDrift, 0, 100)
   }
 
   state.tick += ticks
@@ -143,10 +230,10 @@ export function runOfflineCatchup(state: GameState): OfflineSummary | null {
   }
   if (capsGain > 0) parts.push(`+${Math.round(capsGain)} caps`)
   if (summary.births > 0) parts.push(`${summary.births} birth${summary.births > 1 ? 's' : ''}`)
+  if (summary.deaths > 0) parts.push(`${summary.deaths} death${summary.deaths > 1 ? 's' : ''}`)
   const text = `Welcome back — ${mins} min away. ${parts.join(', ') || 'Nothing changed.'}`
-  pushLog(state, text, 'good')
+  pushLog(state, text, summary.deaths > 0 ? 'bad' : 'good')
 
-  void PREGNANCY_TICKS
   return summary
 }
 

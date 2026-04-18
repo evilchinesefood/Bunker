@@ -1,5 +1,6 @@
 import type { GameState } from '../../State/GameState'
-import { h, icon } from '../Dom'
+import { ROOM_CATALOG } from '../../Domain/Rooms'
+import { h, icon, clampToViewport } from '../Dom'
 
 export function assignMenu(
   state: GameState,
@@ -11,6 +12,7 @@ export function assignMenu(
 ): HTMLElement {
   const room = state.rooms.find(r => r.id === roomId)
   if (!room) return h('div')
+  const affStat = ROOM_CATALOG[room.typeId].affinity
 
   const candidates = state.dwellers.filter(d => {
     if (d.isChild) return false
@@ -19,31 +21,41 @@ export function assignMenu(
     return true
   })
 
-  const list = candidates.map(d =>
-    h(
+  const [lx, ly] = clampToViewport(x, y, 240, Math.min(260, candidates.length * 28 + 20))
+
+  const items = candidates.map(d => {
+    const stats = (['str', 'int', 'end', 'cha'] as const).map(s =>
+      h('span', { class: affStat === s ? 'stat-hl' : '' }, String(d.stats[s])),
+    )
+    return h(
       'button',
       {
-        onclick: () => {
+        type: 'button',
+        onclick: (() => {
           onAssign(d.id)
           onClose()
-        },
+        }) as EventListener,
       },
       icon('fa-user'),
-      ` ${d.name} (${d.stats.str}/${d.stats.int}/${d.stats.end}/${d.stats.cha})`,
-    ),
-  )
+      ' ',
+      h('span', { class: 'aname' }, d.name),
+      ' ',
+      h('span', { class: 'astats' }, stats[0], '/', stats[1], '/', stats[2], '/', stats[3]),
+    )
+  })
 
   return h(
     'div',
-    { class: 'modal-backdrop', onclick: onClose, style: 'background:transparent' },
+    { class: 'modal-backdrop assign-backdrop', onclick: onClose },
     h(
       'div',
       {
         class: 'assign-menu',
-        onclick: (e: Event) => e.stopPropagation(),
-        style: `left:${x}px;top:${y}px`,
+        role: 'menu',
+        onclick: ((e: Event) => e.stopPropagation()) as EventListener,
+        style: `left:${lx}px;top:${ly}px`,
       },
-      list.length ? h('div', {}, ...list) : h('div', { class: 'empty' }, 'No available dwellers'),
+      items.length ? h('div', {}, ...items) : h('div', { class: 'empty' }, 'No available dwellers'),
     ),
   )
 }

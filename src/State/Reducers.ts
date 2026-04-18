@@ -1,4 +1,5 @@
 import type { GameState, Room, ResourceId } from './GameState'
+import { MAX_LOG } from './GameState'
 import { ROOM_CATALOG, slotsAtLevel, upgradeCost } from '../Domain/Rooms'
 import { uuid } from '../Domain/Rng'
 
@@ -11,6 +12,9 @@ export function recomputeCaps(state: GameState): void {
     }
   }
   state.resourceCaps = base
+  for (const res of ['power', 'water', 'food'] as ResourceId[]) {
+    state.resources[res] = Math.min(state.resources[res], base[res])
+  }
 }
 
 export function housingCap(state: GameState): number {
@@ -109,5 +113,7 @@ export function pushLog(
   severity: 'info' | 'warn' | 'bad' | 'good' = 'info',
 ): void {
   state.eventLog.push({ tick: state.tick, text, severity })
-  if (state.eventLog.length > 50) state.eventLog.splice(0, state.eventLog.length - 50)
+  if (state.eventLog.length > MAX_LOG) {
+    state.eventLog.splice(0, state.eventLog.length - MAX_LOG)
+  }
 }

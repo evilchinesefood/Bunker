@@ -6,36 +6,41 @@ export function confirmModal(
   onConfirm: () => void,
   onClose: () => void,
 ): HTMLElement {
+  const cancelBtn = h(
+    'button',
+    { type: 'button', class: 'btn', onclick: onClose, autofocus: true },
+    'CANCEL',
+  )
   return h(
     'div',
     { class: 'modal-backdrop', onclick: onClose },
     h(
       'div',
-      { class: 'modal', onclick: (e: Event) => e.stopPropagation() },
-      h('button', { class: 'close', onclick: onClose }, '×'),
-      h('h2', {}, title),
-      h('div', { class: 'confirm-body' }, body),
+      {
+        class: 'modal confirm-modal',
+        role: 'alertdialog',
+        'aria-modal': 'true',
+        'aria-labelledby': 'confirm-title',
+        'aria-describedby': 'confirm-body',
+        onclick: ((e: Event) => e.stopPropagation()) as EventListener,
+      },
+      h('button', { class: 'close', type: 'button', 'aria-label': 'Close', onclick: onClose }, '×'),
+      h('h2', { id: 'confirm-title' }, title),
+      h('div', { id: 'confirm-body', class: 'confirm-body' }, body),
       h(
         'div',
         { class: 'confirm-actions' },
+        cancelBtn,
         h(
           'button',
           {
-            onclick: onClose,
-            style:
-              'background:var(--bg-2);color:var(--fg);border:1px solid var(--border);padding:4px 10px;cursor:pointer;font-family:inherit;',
-          },
-          'CANCEL',
-        ),
-        h(
-          'button',
-          {
-            onclick: () => {
+            type: 'button',
+            class: 'btn btn-danger',
+            'aria-label': `Confirm destructive action: ${title}`,
+            onclick: (() => {
               onConfirm()
               onClose()
-            },
-            style:
-              'background:var(--bg-2);color:var(--bad);border:1px solid var(--bad);padding:4px 10px;cursor:pointer;font-family:inherit;',
+            }) as EventListener,
           },
           'CONFIRM',
         ),

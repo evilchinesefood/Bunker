@@ -1,32 +1,44 @@
-import type { GameState } from '../State/GameState'
-import { PREGNANCY_TICKS } from '../State/GameState'
+import type { GameState, Dweller } from '../State/GameState'
+import { PREGNANCY_TICKS, MAX_DWELLERS } from '../State/GameState'
 import { ROOM_CATALOG } from '../Domain/Rooms'
 import { makeDweller, inheritedStats, generateName } from '../Domain/Dwellers'
 import { rand } from '../Domain/Rng'
-import { pushLog } from '../State/Reducers'
-import { housingCap } from '../State/Reducers'
+import { pushLog, housingCap } from '../State/Reducers'
 
-export function tryPairingAndConceive(state: GameState): void {
+export function populationCap(state: GameState): number {
+  return Math.min(housingCap(state), MAX_DWELLERS)
+}
+
+export function tryPairingAndConceive(state: GameState, dwellerById: Map<string, Dweller>): void {
   if (state.tick % 60 !== 0 || state.tick === 0) return
-  const capFull = state.dwellers.length >= housingCap(state)
-  if (capFull) return
+  if (state.dwellers.length >= populationCap(state)) return
 
   const quarters = state.rooms.filter(r => ROOM_CATALOG[r.typeId].kind === 'housing')
   for (const q of quarters) {
-    const inside = q.assigned
-      .map(id => state.dwellers.find(d => d.id === id))
-      .filter((d): d is NonNullable<typeof d> => !!d && !d.isChild && d.status !== 'pregnant')
+    const inside: Dweller[] = []
+    for (const id of q.assigned) {
+      const d = dwellerById.get(id)
+      if (!d || d.isChild || d.status === 'pregnant') continue
+      inside.push(d)
+    }
     if (inside.length < 2) continue
 
-    for (let i = 0; i < inside.length - 1; i += 2) {
-      const a = inside[i]
-      const b = inside[i + 1]
-      if (!a.partnerId && !b.partnerId) {
-        a.partnerId = b.id
-        b.partnerId = a.id
-        pushLog(state, `${a.name} and ${b.name} paired up.`, 'good')
-      }
-      if (a.partnerId === b.id && rand(state) < 0.08) {
+    const unpaired = inside.filter(d => !d.partnerId)
+    for (let i = 0; i + 1 < unpaired.length; i += 2) {
+      const a = unpaired[i]
+      const b = unpaired[i + 1]
+      a.partnerId = b.id
+      b.partnerId = a.id
+      pushLog(state, `${a.name} and ${b.name} paired up.`, 'good')
+    }
+
+    for (const a of inside) {
+      if (!a.partnerId) continue
+      const b = dwellerById.get(a.partnerId)
+      if (!b || b.isChild || b.status === 'pregnant') continue
+      if (b.location !== q.id) continue
+      if (a.id > b.id) continue
+      if (rand(state) < 0.08) {
         state.pregnancies.push({
           motherId: a.id,
           fatherId: b.id,
@@ -34,20 +46,26 @@ export function tryPairingAndConceive(state: GameState): void {
         })
         a.status = 'pregnant'
         pushLog(state, `${a.name} is pregnant!`, 'good')
+        return
       }
     }
   }
 }
 
-export function advancePregnancies(state: GameState): void {
+export function advancePregnancies(state: GameState, dwellerById: Map<string, Dweller>): void {
   if (state.pregnancies.length === 0) return
   const remain = []
   for (const p of state.pregnancies) {
     p.ticksRemaining -= 1
     if (p.ticksRemaining <= 0) {
-      const mom = state.dwellers.find(d => d.id === p.motherId)
-      const dad = state.dwellers.find(d => d.id === p.fatherId)
+      const mom = dwellerById.get(p.motherId)
+      const dad = dwellerById.get(p.fatherId)
       if (!mom || !dad) continue
+      if (state.dwellers.length >= populationCap(state)) {
+        mom.status = 'idle'
+        pushLog(state, `${mom.name}'s baby has nowhere to live — labor postponed.`, 'warn')
+        continue
+      }
       const child = makeDweller(state, {
         name: generateName(state),
         stats: inheritedStats(state, mom, dad),
@@ -56,10 +74,12 @@ export function advancePregnancies(state: GameState): void {
         status: 'idle',
       })
       state.dwellers.push(child)
+      dwellerById.set(child.id, child)
       mom.status = 'idle'
       pushLog(state, `${mom.name} gave birth to ${child.name}!`, 'good')
       if (!state.milestones.includes('first_birth')) {
         state.milestones.push('first_birth')
+        pushLog(state, 'Milestone: first birth.', 'good')
       }
     } else {
       remain.push(p)
@@ -70,7 +90,7 @@ export function advancePregnancies(state: GameState): void {
 
 export function rollRecruit(state: GameState): void {
   if (state.tick % 180 !== 0 || state.tick === 0) return
-  if (state.dwellers.length >= housingCap(state)) return
+  if (state.dwellers.length >= populationCap(state)) return
 
   let chance = 0.02
   for (const r of state.rooms) {

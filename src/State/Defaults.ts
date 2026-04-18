@@ -1,5 +1,4 @@
 import { CURRENT_VERSION, type GameState } from './GameState'
-import { ROOM_CATALOG } from '../Domain/Rooms'
 import { makeDweller } from '../Domain/Dwellers'
 import { uuid } from '../Domain/Rng'
 
@@ -16,13 +15,7 @@ export function starterState(): GameState {
     dwellers: [],
     pregnancies: [],
     activeEvents: [],
-    eventLog: [
-      {
-        tick: 0,
-        text: 'Bunker initialized. Welcome, Overseer.',
-        severity: 'good',
-      },
-    ],
+    eventLog: [{ tick: 0, text: 'Bunker initialized. Welcome, Overseer.', severity: 'good' }],
     milestones: [],
     rng: Math.floor(Math.random() * 0x7fffffff),
   }
@@ -36,36 +29,26 @@ export function starterState(): GameState {
     fireActive: false,
   })
 
-  state.rooms.push(makeRoom('power_plant'))
-  state.rooms.push(makeRoom('water_treatment'))
-  state.rooms.push(makeRoom('hydroponics'))
-  state.rooms.push(makeRoom('quarters'))
+  const power = makeRoom('power_plant')
+  const water = makeRoom('water_treatment')
+  const food = makeRoom('hydroponics')
+  state.rooms.push(power, water, food, makeRoom('quarters'))
 
   for (let i = 0; i < 5; i++) {
     state.dwellers.push(makeDweller(state))
   }
 
-  const power = state.rooms.find(r => r.typeId === 'power_plant')!
-  const water = state.rooms.find(r => r.typeId === 'water_treatment')!
-  const food = state.rooms.find(r => r.typeId === 'hydroponics')!
-
-  state.dwellers[0].location = power.id
-  state.dwellers[0].status = 'working'
-  power.assigned.push(state.dwellers[0].id)
-
-  state.dwellers[1].location = water.id
-  state.dwellers[1].status = 'working'
-  water.assigned.push(state.dwellers[1].id)
-
-  state.dwellers[2].location = food.id
-  state.dwellers[2].status = 'working'
-  food.assigned.push(state.dwellers[2].id)
-
-  for (const id of [power.id, water.id, food.id]) {
-    const rt = ROOM_CATALOG[state.rooms.find(r => r.id === id)!.typeId]
-    for (const [res, boost] of Object.entries(rt.capBoostPerLevel)) {
-      state.resourceCaps[res as 'power' | 'water' | 'food'] = 100 + (boost ?? 0) * 0
-    }
+  const [d0, d1, d2] = state.dwellers
+  if (d0 && d1 && d2) {
+    d0.location = power.id
+    d0.status = 'working'
+    power.assigned.push(d0.id)
+    d1.location = water.id
+    d1.status = 'working'
+    water.assigned.push(d1.id)
+    d2.location = food.id
+    d2.status = 'working'
+    food.assigned.push(d2.id)
   }
 
   return state

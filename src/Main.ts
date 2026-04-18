@@ -2,9 +2,9 @@ import type { GameState, ResourceId } from './State/GameState'
 import { starterState } from './State/Defaults'
 import { load, save, wipe } from './Save/Storage'
 import { tick } from './Sim/Tick'
-import { runOfflineCatchup } from './Sim/Offline'
-import { render } from './UI/Render'
-import { pruneToasts, pushToast } from './UI/UiState'
+import { runOfflineCatchup, type OfflineSummary } from './Sim/Offline'
+import { render, installGlobalKeyboard } from './UI/Render'
+import { pruneToasts, pushToast, resetUi, ui } from './UI/UiState'
 import { recomputeCaps } from './State/Reducers'
 
 let state: GameState = load() ?? starterState()
@@ -13,13 +13,11 @@ recomputeCaps(state)
 const seenMilestones = new Set<string>(state.milestones)
 let lastLogLen = state.eventLog.length
 let lastShortage: Record<ResourceId, boolean> = { power: false, water: false, food: false }
+let ticksSinceSave = 0
 
-const summary = runOfflineCatchup(state)
-if (summary) {
-  const last = state.eventLog[state.eventLog.length - 1]
-  pushToast('milestone', 'WELCOME BACK', last?.text ?? 'Offline catch-up complete.')
-  lastLogLen = state.eventLog.length
-}
+const bootSummary = runOfflineCatchup(state)
+emitWelcomeBack(bootSummary)
+lastLogLen = state.eventLog.length
 save(state)
 
 let rafScheduled = false
@@ -46,8 +44,19 @@ function resetGame(): void {
   for (const m of state.milestones) seenMilestones.add(m)
   lastLogLen = state.eventLog.length
   lastShortage = { power: false, water: false, food: false }
+  ticksSinceSave = 0
+  resetUi()
   pushToast('milestone', 'NEW BUNKER', 'A fresh start.')
   requestRender()
+}
+
+const MILESTONE_LABELS: Record<string, string> = {
+  first_birth: 'First birth',
+  pop_10: 'Population reached 10',
+  pop_25: 'Population reached 25',
+  pop_50: 'Population reached 50',
+  first_lv3: 'First Level-3 room',
+  one_year: '1 in-game year survived',
 }
 
 let lastTick = performance.now()
@@ -61,10 +70,14 @@ function step(now: number): void {
         const result = tick(state)
         raiseShortageToasts(result.shortages)
         lastTick += 1000
+        ticksSinceSave += 1
       }
       emitLogToasts()
       emitMilestoneToasts()
-      if (state.tick % 20 === 0) save(state)
+      if (ticksSinceSave >= 20) {
+        save(state)
+        ticksSinceSave = 0
+      }
       requestRender()
     }
     if (pruneToasts()) requestRender()
@@ -72,12 +85,26 @@ function step(now: number): void {
   requestAnimationFrame(step)
 }
 
+function emitWelcomeBack(summary: OfflineSummary | null): void {
+  if (!summary) return
+  const mins = Math.round(summary.elapsedMs / 60000)
+  const parts: string[] = []
+  for (const r of ['power', 'water', 'food'] as ResourceId[]) {
+    const g = summary.gains[r]
+    if (g) parts.push(`${g >= 0 ? '+' : ''}${Math.round(g)} ${r}`)
+  }
+  if (summary.capsGain > 0) parts.push(`+${Math.round(summary.capsGain)} caps`)
+  if (summary.births) parts.push(`${summary.births} birth${summary.births > 1 ? 's' : ''}`)
+  if (summary.deaths) parts.push(`${summary.deaths} death${summary.deaths > 1 ? 's' : ''}`)
+  const body = `${mins} min away. ${parts.join(', ') || 'Nothing changed.'}`
+  pushToast(summary.deaths > 0 ? 'bad' : 'milestone', 'WELCOME BACK', body)
+}
+
 function emitMilestoneToasts(): void {
   for (const id of state.milestones) {
     if (seenMilestones.has(id)) continue
     seenMilestones.add(id)
-    const lbl = id.replace(/_/g, ' ').toUpperCase()
-    pushToast('milestone', 'MILESTONE', lbl)
+    pushToast('milestone', 'MILESTONE', MILESTONE_LABELS[id] ?? id)
   }
 }
 
@@ -104,7 +131,7 @@ function emitLogToasts(): void {
 function raiseShortageToasts(shortages: ResourceId[]): void {
   const cur: Record<ResourceId, boolean> = { power: false, water: false, food: false }
   for (const s of shortages) cur[s] = true
-  for (const res of ['power', 'water', 'food'] as ResourceId[]) {
+  for (const res of ['water', 'food'] as ResourceId[]) {
     if (cur[res] && !lastShortage[res]) {
       pushToast('bad', 'SHORTAGE', `${res.toUpperCase()} has run out!`)
     }
@@ -112,14 +139,28 @@ function raiseShortageToasts(shortages: ResourceId[]): void {
   lastShortage = cur
 }
 
+installGlobalKeyboard(key => {
+  if (key === 'Escape') {
+    if (ui.assignMenu) {
+      ui.assignMenu = null
+      requestRender()
+    } else if (ui.modal) {
+      ui.modal = null
+      requestRender()
+    } else if (ui.expandedRoomId) {
+      ui.expandedRoomId = null
+      requestRender()
+    }
+  }
+})
+
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     save(state)
   } else {
     const s2 = runOfflineCatchup(state)
     if (s2) {
-      const last = state.eventLog[state.eventLog.length - 1]
-      pushToast('milestone', 'WELCOME BACK', last?.text ?? 'Offline catch-up complete.')
+      emitWelcomeBack(s2)
       lastTick = performance.now()
       lastLogLen = state.eventLog.length
       requestRender()

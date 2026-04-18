@@ -6,10 +6,11 @@ export function h<K extends keyof HTMLElementTagNameMap>(
   ...children: (Node | string | null | undefined | false)[]
 ): HTMLElementTagNameMap[K] {
   const el = document.createElement(tag)
-  for (const [k, v] of Object.entries(attrs)) {
+  for (const k in attrs) {
+    const v = attrs[k]
     if (v === null || v === undefined || v === false) continue
     if (k === 'class') el.className = String(v)
-    else if (k.startsWith('on') && typeof v === 'function') {
+    else if (k.charCodeAt(0) === 111 && k.charCodeAt(1) === 110 && typeof v === 'function') {
       el.addEventListener(k.slice(2).toLowerCase(), v as EventListener)
     } else if (typeof v === 'boolean') {
       if (v) el.setAttribute(k, '')
@@ -25,7 +26,7 @@ export function h<K extends keyof HTMLElementTagNameMap>(
 }
 
 export function icon(fa: string, extra = ''): HTMLElement {
-  return h('i', { class: `fa-solid ${fa} ${extra}`.trim() })
+  return h('i', { class: `fa-solid ${fa} ${extra}`.trim(), 'aria-hidden': 'true' })
 }
 
 export function fmt(n: number): string {
@@ -42,4 +43,14 @@ export function fmtRate(n: number): string {
 
 export function clear(node: HTMLElement): void {
   while (node.firstChild) node.removeChild(node.firstChild)
+}
+
+export function clearOverlays(): void {
+  document.querySelectorAll('.modal-backdrop, .toasts').forEach(n => n.remove())
+}
+
+export function clampToViewport(x: number, y: number, w: number, hgt: number): [number, number] {
+  const nx = Math.max(8, Math.min(x, window.innerWidth - w - 8))
+  const ny = Math.max(8, Math.min(y, window.innerHeight - hgt - 8))
+  return [nx, ny]
 }

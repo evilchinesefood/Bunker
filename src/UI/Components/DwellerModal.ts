@@ -1,6 +1,6 @@
 import type { GameState, StatId } from '../../State/GameState'
-import { XP_TO_STAT } from '../../State/GameState'
-import { ROOM_CATALOG } from '../../Domain/Rooms'
+import { XP_TO_STAT, TICKS_PER_MINUTE } from '../../State/GameState'
+import { ROOM_CATALOG, slotsAtLevel } from '../../Domain/Rooms'
 import { h, icon } from '../Dom'
 
 const STATS: StatId[] = ['str', 'int', 'end', 'cha']
@@ -28,25 +28,33 @@ export function dwellerModal(
   const locRoom = d.location ? state.rooms.find(r => r.id === d.location) : null
   const locLabel = locRoom ? ROOM_CATALOG[locRoom.typeId].name : 'Idle'
 
-  const rooms = state.rooms
-    .filter(r => r.assigned.length < ROOM_CATALOG[r.typeId].baseCapacity + (r.level - 1))
-    .filter(r => ROOM_CATALOG[r.typeId].kind !== 'lounge' || true)
+  const pregnancy = state.pregnancies.find(p => p.motherId === d.id || p.fatherId === d.id)
+  const pregText = pregnancy
+    ? `Due in ~${Math.max(1, Math.round(pregnancy.ticksRemaining / TICKS_PER_MINUTE))} min`
+    : null
+
+  const rooms = state.rooms.filter(r => {
+    const cap = slotsAtLevel(ROOM_CATALOG[r.typeId], r.level)
+    return r.id === d.location || r.assigned.length < cap
+  })
 
   const select = h(
     'select',
     {
-      onchange: (e: Event) => {
+      id: `reassign-${d.id}`,
+      onchange: ((e: Event) => {
         const v = (e.target as HTMLSelectElement).value
         onReassign(dwellerId, v || null)
-      },
+      }) as EventListener,
     },
-    h('option', { value: '' }, '— idle —'),
+    h('option', { value: '' }, '— Idle —'),
     ...rooms.map(r => {
       const t = ROOM_CATALOG[r.typeId]
+      const cap = slotsAtLevel(t, r.level)
       return h(
         'option',
         { value: r.id, selected: r.id === d.location },
-        `${t.name} Lv${r.level} (${r.assigned.length}/${t.baseCapacity + (r.level - 1)})`,
+        `${t.name} Lv${r.level} (${r.assigned.length}/${cap})`,
       )
     }),
   )
@@ -58,10 +66,13 @@ export function dwellerModal(
       'div',
       {
         class: 'modal dweller-modal',
-        onclick: (e: Event) => e.stopPropagation(),
+        role: 'dialog',
+        'aria-modal': 'true',
+        'aria-labelledby': 'dweller-modal-title',
+        onclick: ((e: Event) => e.stopPropagation()) as EventListener,
       },
-      h('button', { class: 'close', onclick: onClose }, '×'),
-      h('h2', {}, icon(d.isChild ? 'fa-baby' : 'fa-user'), ` ${d.name}`),
+      h('button', { class: 'close', type: 'button', 'aria-label': 'Close', onclick: onClose }, '×'),
+      h('h2', { id: 'dweller-modal-title' }, icon(d.isChild ? 'fa-baby' : 'fa-user'), ` ${d.name}`),
       h('div', { class: 'stats' }, ...statCards),
       h(
         'div',
@@ -78,8 +89,15 @@ export function dwellerModal(
         h('b', {}, partner ? partner.name : 'none'),
         h('span', {}, 'Location'),
         h('b', {}, locLabel),
+        pregText ? h('span', {}, 'Pregnancy') : null,
+        pregText ? h('b', {}, pregText) : null,
       ),
-      h('div', { style: 'margin-top:14px' }, h('b', {}, 'Reassign: '), select),
+      h(
+        'div',
+        { class: 'reassign-row' },
+        h('label', { for: `reassign-${d.id}` }, 'Reassign: '),
+        select,
+      ),
     ),
   )
 }

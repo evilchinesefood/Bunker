@@ -1,5 +1,5 @@
 import type { GameState } from '../State/GameState'
-import { h, icon, clear } from './Dom'
+import { h, icon, clear, clearOverlays } from './Dom'
 import { ui, pushToast } from './UiState'
 import { resourceBar } from './Components/ResourceBar'
 import { roomCard } from './Components/RoomCard'
@@ -16,7 +16,10 @@ import {
   unassignDweller,
   upgradeRoom,
 } from '../State/Reducers'
-import { wipe } from '../Save/Storage'
+import { ROOM_CATALOG, upgradeCost } from '../Domain/Rooms'
+import { fmt } from './Dom'
+
+const SEV_PREFIX: Record<string, string> = { warn: '[!]', bad: '[X]', good: '[+]', info: '[*]' }
 
 export interface RenderCtx {
   state: GameState
@@ -25,10 +28,20 @@ export interface RenderCtx {
   render: () => void
 }
 
+function computeRefund(state: GameState, roomId: string): number {
+  const r = state.rooms.find(x => x.id === roomId)
+  if (!r) return 0
+  const t = ROOM_CATALOG[r.typeId]
+  let spent = t.baseCost
+  for (let l = 1; l < r.level; l++) spent += upgradeCost(t, l as 1 | 2 | 3)
+  return Math.round(spent * t.demolishRefundPct)
+}
+
 export function render(ctx: RenderCtx): void {
   const root = document.getElementById('app')
   if (!root) return
   clear(root)
+  clearOverlays()
 
   root.appendChild(
     resourceBar(ctx.state, () => {
@@ -36,10 +49,7 @@ export function render(ctx: RenderCtx): void {
         kind: 'confirm',
         title: 'RESET BUNKER',
         body: 'Wipe save and start a new bunker? This cannot be undone.',
-        onConfirm: () => {
-          wipe()
-          ctx.reset()
-        },
+        onConfirm: ctx.reset,
       }
       ctx.render()
     }),
@@ -48,32 +58,54 @@ export function render(ctx: RenderCtx): void {
   const shortages: string[] = []
   if (ctx.state.resources.water <= 0) shortages.push('WATER — DWELLERS DEHYDRATING')
   if (ctx.state.resources.food <= 0) shortages.push('FOOD — DWELLERS STARVING')
-  if (ctx.state.resources.power <= 0) shortages.push('POWER — SYSTEMS FAILING')
   if (shortages.length) {
     root.appendChild(
-      h('div', { class: 'banner' }, icon('fa-triangle-exclamation'), ` ${shortages.join(' · ')}`),
+      h(
+        'div',
+        { class: 'banner', role: 'alert' },
+        icon('fa-triangle-exclamation'),
+        ` ${shortages.join(' · ')}`,
+      ),
     )
   }
 
-  const rooms = h(
+  const anyExpanded = ui.expandedRoomId !== null
+  const roomsHead = h(
     'div',
-    { class: 'rooms' },
-    h(
-      'div',
-      { class: 'section-head' },
-      'Rooms',
-      h('span', { class: 'count' }, String(ctx.state.rooms.length)),
-      h(
-        'button',
-        {
-          onclick: () => {
-            ui.modal = { kind: 'build' }
-            ctx.render()
+    { class: 'section-head' },
+    h('span', {}, 'Rooms'),
+    h('span', { class: 'count' }, String(ctx.state.rooms.length)),
+    anyExpanded
+      ? h(
+          'button',
+          {
+            type: 'button',
+            'aria-label': 'Collapse expanded room',
+            onclick: () => {
+              ui.expandedRoomId = null
+              ctx.render()
+            },
           },
+          'COLLAPSE',
+        )
+      : null,
+    h(
+      'button',
+      {
+        type: 'button',
+        onclick: () => {
+          ui.modal = { kind: 'build' }
+          ctx.render()
         },
-        '+ BUILD',
-      ),
+      },
+      '+ BUILD',
     ),
+  )
+
+  const rooms = h(
+    'section',
+    { class: 'rooms', 'aria-label': 'Rooms' },
+    roomsHead,
     ...ctx.state.rooms.map(r =>
       roomCard(ctx.state, r, {
         onToggle: id => {
@@ -97,10 +129,11 @@ export function render(ctx: RenderCtx): void {
           }
         },
         onDemolish: id => {
+          const refund = computeRefund(ctx.state, id)
           ui.modal = {
             kind: 'confirm',
             title: 'DEMOLISH',
-            body: 'Refund 50% of spent caps. Assigned dwellers go idle.',
+            body: `Refund: ${fmt(refund)} caps. Assigned dwellers become idle.`,
             onConfirm: () => {
               demolishRoom(ctx.state, id)
               if (ui.expandedRoomId === id) ui.expandedRoomId = null
@@ -123,16 +156,28 @@ export function render(ctx: RenderCtx): void {
     ctx.render()
   })
 
-  const main = h('div', { class: 'main' }, rooms, dwellers)
+  const main = h('main', { class: 'main' }, rooms, dwellers)
   root.appendChild(main)
 
-  const log = h('div', { class: 'log' })
-  const recent = ctx.state.eventLog.slice(-40).reverse()
-  for (const e of recent) {
+  const log = h('footer', {
+    class: 'log',
+    role: 'log',
+    'aria-live': 'polite',
+    'aria-label': 'Event log',
+  })
+  const recent = ctx.state.eventLog.slice(-40)
+  for (let i = recent.length - 1; i >= 0; i--) {
+    const e = recent[i]
     const mins = Math.floor(e.tick / 60)
     const ts = `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}:${String(e.tick % 60).padStart(2, '0')}`
     log.appendChild(
-      h('div', { class: `entry ${e.severity}` }, h('span', { class: 't' }, ts), e.text),
+      h(
+        'div',
+        { class: `entry ${e.severity}` },
+        h('span', { class: 't' }, ts),
+        h('span', { class: 'sev' }, SEV_PREFIX[e.severity] ?? '[*]'),
+        e.text,
+      ),
     )
   }
   root.appendChild(log)
@@ -203,4 +248,17 @@ export function render(ctx: RenderCtx): void {
   }
 
   document.body.appendChild(toastList(ctx.render))
+
+  const firstFocusable = document.querySelector<HTMLElement>(
+    '.modal [autofocus], .modal .close, .modal button, .modal select, .modal input',
+  )
+  if (firstFocusable && document.activeElement === document.body) {
+    firstFocusable.focus()
+  }
+}
+
+export function installGlobalKeyboard(handler: (key: string) => void): void {
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') handler('Escape')
+  })
 }

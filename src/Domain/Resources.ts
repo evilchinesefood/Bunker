@@ -11,5 +11,5 @@ export const RESOURCE_LABEL: Record<ResourceId, string> = {
 export const RESOURCE_ICON: Record<ResourceId, string> = {
   power: 'fa-bolt',
   water: 'fa-droplet',
-  food: 'fa-utensils',
+  food: 'fa-seedling',
 }

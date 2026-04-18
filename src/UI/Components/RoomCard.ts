@@ -12,7 +12,7 @@ export interface RoomHandlers {
   onOpenDweller: (id: string) => void
 }
 
-export function roomCard(state: GameState, room: Room, h2: RoomHandlers): HTMLElement {
+export function roomCard(state: GameState, room: Room, handlers: RoomHandlers): HTMLElement {
   const type = ROOM_CATALOG[room.typeId]
   const slots = slotsAtLevel(type, room.level)
   const expanded = ui.expandedRoomId === room.id
@@ -22,12 +22,17 @@ export function roomCard(state: GameState, room: Room, h2: RoomHandlers): HTMLEl
   let prodText = ''
   if (type.produces && room.assigned.length > 0) {
     const aff = type.affinity
-      ? room.assigned.reduce((s, id) => {
-          const d = state.dwellers.find(x => x.id === id)
-          return s + (d ? d.stats[type.affinity!] : 0)
-        }, 0)
-      : room.assigned.length * 5
-    const per = type.baseProduction * room.level * aff
+    let sum = 0
+    if (aff) {
+      for (const id of room.assigned) {
+        const d = state.dwellers.find(x => x.id === id)
+        if (d) sum += d.stats[aff]
+      }
+    } else {
+      sum = room.assigned.length * 5
+    }
+    const avg = sum / room.assigned.length
+    const per = type.baseProduction * room.level * avg * room.assigned.length
     prodText = `+${(per * 60).toFixed(1)}/m ${type.produces}`
   } else if (type.trainsStat) {
     prodText = `Trains ${type.trainsStat.toUpperCase()}`
@@ -37,15 +42,27 @@ export function roomCard(state: GameState, room: Room, h2: RoomHandlers): HTMLEl
     prodText = 'Happiness ↑'
   }
 
+  const assignedBadge = `${room.assigned.length}/${slots}`
+  const emptySlots = slots - room.assigned.length
+  const attention = emptySlots > 0 && type.kind !== 'housing' && type.kind !== 'lounge'
+
   const row = h(
     'div',
     { class: 'row' },
     h('div', { class: 'icon' }, icon(type.icon)),
     h(
       'div',
-      {},
+      { class: 'room-title' },
       h('span', { class: 'name' }, type.name),
       h('span', { class: 'lvl' }, `Lv${room.level}`),
+    ),
+    h(
+      'span',
+      {
+        class: `slot-badge${attention ? ' attention' : ''}`,
+        'aria-label': `${room.assigned.length} of ${slots} assigned`,
+      },
+      assignedBadge,
     ),
     h('div', { class: 'prod' }, prodText),
     h(
@@ -53,19 +70,30 @@ export function roomCard(state: GameState, room: Room, h2: RoomHandlers): HTMLEl
       { class: `hp${room.hp < 40 ? ' low' : ''}` },
       room.hp < 100 ? `HP ${Math.round(room.hp)}` : '',
     ),
+    h('i', {
+      class: `fa-solid ${expanded ? 'fa-chevron-up' : 'fa-chevron-down'} chev`,
+      'aria-hidden': 'true',
+    }),
   )
 
-  const card = h(
-    'div',
-    {
-      class: cls,
-      onclick: (e: Event) => {
-        if ((e.target as HTMLElement).closest('button,.chip,.assign-menu')) return
-        h2.onToggle(room.id)
-      },
-    },
-    row,
-  )
+  const cardAttrs: Record<string, string | EventListener | boolean> = {
+    class: cls,
+    role: 'button',
+    tabindex: '0',
+    'aria-expanded': expanded ? 'true' : 'false',
+    'aria-label': `${type.name} level ${room.level}, ${assignedBadge} assigned${room.fireActive ? ', on fire' : ''}`,
+    onclick: ((e: Event) => {
+      if ((e.target as HTMLElement).closest('button,.chip,.assign-menu,.chip-remove')) return
+      handlers.onToggle(room.id)
+    }) as EventListener,
+    onkeydown: ((e: KeyboardEvent) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return
+      if ((e.target as HTMLElement).closest('button,.chip,.chip-remove')) return
+      e.preventDefault()
+      handlers.onToggle(room.id)
+    }) as unknown as EventListener,
+  }
+  const card = h('div', cardAttrs, row)
 
   if (expanded) {
     const slotEls: HTMLElement[] = []
@@ -75,33 +103,49 @@ export function roomCard(state: GameState, room: Room, h2: RoomHandlers): HTMLEl
       slotEls.push(
         h(
           'span',
-          {
-            class: 'chip',
-            title: 'Click to open dweller; right-click to unassign',
-            onclick: (e: Event) => {
-              e.stopPropagation()
-              h2.onOpenDweller(d.id)
+          { class: 'chip' },
+          h(
+            'button',
+            {
+              class: 'chip-main',
+              type: 'button',
+              'aria-label': `Open ${d.name}`,
+              onclick: ((e: Event) => {
+                e.stopPropagation()
+                handlers.onOpenDweller(d.id)
+              }) as EventListener,
             },
-            oncontextmenu: (e: Event) => {
-              e.preventDefault()
-              e.stopPropagation()
-              h2.onUnassign(room.id, d.id)
+            icon('fa-user'),
+            ` ${d.name}`,
+          ),
+          h(
+            'button',
+            {
+              class: 'chip-remove',
+              type: 'button',
+              title: 'Unassign',
+              'aria-label': `Unassign ${d.name}`,
+              onclick: ((e: Event) => {
+                e.stopPropagation()
+                handlers.onUnassign(room.id, d.id)
+              }) as EventListener,
             },
-          },
-          icon('fa-user'),
-          ` ${d.name}`,
+            '×',
+          ),
         ),
       )
     }
     for (let i = room.assigned.length; i < slots; i++) {
       slotEls.push(
         h(
-          'span',
+          'button',
           {
             class: 'chip empty',
+            type: 'button',
+            'aria-label': 'Assign a dweller',
             onclick: ((e: MouseEvent) => {
               e.stopPropagation()
-              h2.onOpenAssign(room.id, e.clientX, e.clientY)
+              handlers.onOpenAssign(room.id, e.clientX, e.clientY)
             }) as EventListener,
           },
           icon('fa-plus'),
@@ -120,23 +164,25 @@ export function roomCard(state: GameState, room: Room, h2: RoomHandlers): HTMLEl
         ? h(
             'button',
             {
+              type: 'button',
               disabled: !canUpgrade,
-              onclick: (e: Event) => {
+              onclick: ((e: Event) => {
                 e.stopPropagation()
-                h2.onUpgrade(room.id)
-              },
+                handlers.onUpgrade(room.id)
+              }) as EventListener,
             },
             `UPGRADE (${fmt(upCost!)} caps)`,
           )
-        : h('button', { disabled: true }, 'MAX LEVEL'),
+        : h('button', { type: 'button', disabled: true }, 'MAX LEVEL'),
       h(
         'button',
         {
+          type: 'button',
           class: 'danger',
-          onclick: (e: Event) => {
+          onclick: ((e: Event) => {
             e.stopPropagation()
-            h2.onDemolish(room.id)
-          },
+            handlers.onDemolish(room.id)
+          }) as EventListener,
         },
         'DEMOLISH',
       ),

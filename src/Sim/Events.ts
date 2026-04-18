@@ -1,4 +1,4 @@
-import type { GameState } from '../State/GameState'
+import type { GameState, Dweller, Room } from '../State/GameState'
 import { ROOM_CATALOG } from '../Domain/Rooms'
 import { rand, pick, uuid } from '../Domain/Rng'
 import { pushLog } from '../State/Reducers'
@@ -30,16 +30,20 @@ export function rollEventsOncePerMinute(state: GameState): void {
   pushLog(state, `FIRE in ${ROOM_CATALOG[target.typeId].name}!`, 'bad')
 }
 
-export function tickActiveEvents(state: GameState): void {
+export function tickActiveEvents(
+  state: GameState,
+  dwellerById: Map<string, Dweller>,
+  roomById: Map<string, Room>,
+): void {
   if (state.activeEvents.length === 0) return
   const survivors = []
   for (const evt of state.activeEvents) {
-    const room = state.rooms.find(r => r.id === evt.roomId)
+    const room = roomById.get(evt.roomId)
     if (!room) continue
     if (evt.typeId === 'fire') {
       room.hp = Math.max(0, room.hp - FIRE_HP_ROOM_PER_TICK)
       for (const dId of room.assigned) {
-        const d = state.dwellers.find(x => x.id === dId)
+        const d = dwellerById.get(dId)
         if (!d) continue
         const defense = d.stats.end + d.stats.str
         const dmg = FIRE_HP_DWELLER_PER_TICK * (11 / (defense + 6))
@@ -50,6 +54,25 @@ export function tickActiveEvents(state: GameState): void {
     if (evt.ticksRemaining <= 0) {
       room.fireActive = false
       pushLog(state, `Fire contained in ${ROOM_CATALOG[room.typeId].name}.`, 'good')
+    } else {
+      survivors.push(evt)
+    }
+  }
+  state.activeEvents = survivors
+}
+
+export function resolveOfflineFires(state: GameState, elapsedTicks: number): void {
+  if (state.activeEvents.length === 0) return
+  const survivors = []
+  for (const evt of state.activeEvents) {
+    const advance = Math.min(evt.ticksRemaining, elapsedTicks)
+    evt.ticksRemaining -= advance
+    if (evt.ticksRemaining <= 0) {
+      const room = state.rooms.find(r => r.id === evt.roomId)
+      if (room) {
+        room.fireActive = false
+        pushLog(state, `Fire in ${ROOM_CATALOG[room.typeId].name} self-extinguished.`, 'info')
+      }
     } else {
       survivors.push(evt)
     }
