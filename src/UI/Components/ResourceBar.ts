@@ -50,7 +50,7 @@ function capsRate(state: GameState): number {
   return per
 }
 
-export function resourceBar(state: GameState, onReset: () => void): HTMLElement {
+export function resourceBar(state: GameState, onOpenGear: () => void): HTMLElement {
   const items: HTMLElement[] = []
   for (const res of ['power', 'water', 'food'] as ResourceId[]) {
     const cur = state.resources[res]
@@ -97,11 +97,11 @@ export function resourceBar(state: GameState, onReset: () => void): HTMLElement 
       {
         class: 'gear',
         type: 'button',
-        title: 'Reset bunker',
-        'aria-label': 'Reset bunker',
-        onclick: onReset,
+        title: 'Settings',
+        'aria-label': 'Open settings',
+        onclick: onOpenGear,
       },
-      icon('fa-rotate-left'),
+      icon('fa-gear'),
     ),
   )
 }

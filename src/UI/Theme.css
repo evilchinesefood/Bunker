@@ -797,6 +797,162 @@ button {
   }
 }
 
+/* ---- Scrollbars ---- */
+.rooms,
+.dwellers,
+.log,
+.modal,
+.assign-list {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) var(--bg-1);
+}
+.rooms::-webkit-scrollbar,
+.dwellers::-webkit-scrollbar,
+.log::-webkit-scrollbar,
+.modal::-webkit-scrollbar,
+.assign-list::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.rooms::-webkit-scrollbar-track,
+.dwellers::-webkit-scrollbar-track,
+.log::-webkit-scrollbar-track,
+.modal::-webkit-scrollbar-track,
+.assign-list::-webkit-scrollbar-track {
+  background: var(--bg-1);
+  border-left: 1px solid var(--border-dim);
+}
+.rooms::-webkit-scrollbar-thumb,
+.dwellers::-webkit-scrollbar-thumb,
+.log::-webkit-scrollbar-thumb,
+.modal::-webkit-scrollbar-thumb,
+.assign-list::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border: 1px solid var(--bg-1);
+}
+.rooms::-webkit-scrollbar-thumb:hover,
+.dwellers::-webkit-scrollbar-thumb:hover,
+.log::-webkit-scrollbar-thumb:hover,
+.modal::-webkit-scrollbar-thumb:hover,
+.assign-list::-webkit-scrollbar-thumb:hover {
+  background: var(--fg-mid);
+}
+
+/* ---- Assign menu (extended) ---- */
+.assign-menu {
+  padding: 0;
+  min-width: 320px;
+  max-width: 400px;
+}
+.assign-head {
+  padding: 6px 10px;
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--fg);
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border-dim);
+  text-transform: uppercase;
+}
+.assign-list {
+  display: grid;
+  gap: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 4px;
+}
+.assign-row {
+  display: grid;
+  grid-template-columns: 16px 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 5px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+.assign-row:hover:not(:disabled) {
+  background: var(--bg-2);
+  border-color: var(--fg-mid);
+}
+.assign-row:disabled,
+.assign-row.assign-here {
+  opacity: 0.6;
+  cursor: default;
+}
+.assign-row .aname {
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.assign-row .aloc {
+  font-size: 10px;
+  padding: 1px 6px;
+  border: 1px solid var(--border-dim);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.assign-row .aloc.idle {
+  color: var(--fg);
+  border-color: var(--fg-mid);
+}
+.assign-row .aloc.here {
+  color: var(--good);
+  border-color: var(--good);
+}
+.assign-row .aloc.busy {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+.assign-row .astats {
+  color: var(--fg-dim);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+
+/* ---- Gear / settings menu ---- */
+.gear-modal {
+  min-width: 380px;
+}
+.gear-list {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+}
+.gear-row {
+  display: grid;
+  grid-template-columns: 18px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--border-dim);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.gear-row:hover {
+  border-color: var(--fg);
+}
+.gear-row.danger {
+  color: var(--bad);
+}
+.gear-row.danger:hover {
+  border-color: var(--bad);
+  background: rgba(255, 85, 102, 0.08);
+}
+.gear-row .gear-hint {
+  font-size: 10px;
+  color: var(--fg-dim);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
 /* ---- Reduced motion ---- */
 @media (prefers-reduced-motion: reduce) {
   *,

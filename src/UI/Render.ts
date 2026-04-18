@@ -1,5 +1,5 @@
 import type { GameState } from '../State/GameState'
-import { h, icon, clear, clearOverlays } from './Dom'
+import { h, icon, clear, fmt } from './Dom'
 import { ui, pushToast } from './UiState'
 import { resourceBar } from './Components/ResourceBar'
 import { roomCard } from './Components/RoomCard'
@@ -9,6 +9,7 @@ import { dwellerModal } from './Components/DwellerModal'
 import { confirmModal } from './Components/ConfirmModal'
 import { toastList } from './Components/Toasts'
 import { assignMenu } from './Components/AssignMenu'
+import { gearMenu } from './Components/GearMenu'
 import {
   assignDweller,
   buildRoom,
@@ -17,7 +18,7 @@ import {
   upgradeRoom,
 } from '../State/Reducers'
 import { ROOM_CATALOG, upgradeCost } from '../Domain/Rooms'
-import { fmt } from './Dom'
+import { playSfx } from './Audio'
 
 const SEV_PREFIX: Record<string, string> = { warn: '[!]', bad: '[X]', good: '[+]', info: '[*]' }
 
@@ -37,23 +38,45 @@ function computeRefund(state: GameState, roomId: string): number {
   return Math.round(spent * t.demolishRefundPct)
 }
 
-export function render(ctx: RenderCtx): void {
+function captureScrolls(root: HTMLElement): Map<string, number> {
+  const out = new Map<string, number>()
+  const targets = root.querySelectorAll<HTMLElement>('.rooms,.dwellers,.log')
+  targets.forEach(el => {
+    const key = el.className.split(' ')[0]
+    out.set(key, el.scrollTop)
+  })
+  return out
+}
+
+function restoreScrolls(root: HTMLElement, scrolls: Map<string, number>): void {
+  scrolls.forEach((top, key) => {
+    const el = root.querySelector<HTMLElement>(`.${key}`)
+    if (el) el.scrollTop = top
+  })
+}
+
+function openGearMenu(ctx: RenderCtx): void {
+  ui.modal = { kind: 'gear' }
+  renderOverlays(ctx)
+}
+
+function openResetConfirm(ctx: RenderCtx): void {
+  ui.modal = {
+    kind: 'confirm',
+    title: 'RESET BUNKER',
+    body: 'Wipe save and start a new bunker? This cannot be undone.',
+    onConfirm: ctx.reset,
+  }
+  renderOverlays(ctx)
+}
+
+export function renderApp(ctx: RenderCtx): void {
   const root = document.getElementById('app')
   if (!root) return
+  const scrolls = captureScrolls(root)
   clear(root)
-  clearOverlays()
 
-  root.appendChild(
-    resourceBar(ctx.state, () => {
-      ui.modal = {
-        kind: 'confirm',
-        title: 'RESET BUNKER',
-        body: 'Wipe save and start a new bunker? This cannot be undone.',
-        onConfirm: ctx.reset,
-      }
-      ctx.render()
-    }),
-  )
+  root.appendChild(resourceBar(ctx.state, () => openGearMenu(ctx)))
 
   const shortages: string[] = []
   if (ctx.state.resources.water <= 0) shortages.push('WATER — DWELLERS DEHYDRATING')
@@ -82,6 +105,7 @@ export function render(ctx: RenderCtx): void {
             type: 'button',
             'aria-label': 'Collapse expanded room',
             onclick: () => {
+              playSfx('click')
               ui.expandedRoomId = null
               ctx.render()
             },
@@ -94,8 +118,9 @@ export function render(ctx: RenderCtx): void {
       {
         type: 'button',
         onclick: () => {
+          playSfx('click')
           ui.modal = { kind: 'build' }
-          ctx.render()
+          renderOverlays(ctx)
         },
       },
       '+ BUILD',
@@ -109,51 +134,59 @@ export function render(ctx: RenderCtx): void {
     ...ctx.state.rooms.map(r =>
       roomCard(ctx.state, r, {
         onToggle: id => {
+          playSfx('click')
           ui.expandedRoomId = ui.expandedRoomId === id ? null : id
           ctx.render()
         },
         onOpenAssign: (roomId, x, y) => {
+          playSfx('click')
           ui.assignMenu = { roomId, x, y }
-          ctx.render()
+          renderOverlays(ctx)
         },
         onUnassign: (_roomId, dId) => {
+          playSfx('assign')
           unassignDweller(ctx.state, dId)
           ctx.save()
           ctx.render()
         },
         onUpgrade: id => {
           if (upgradeRoom(ctx.state, id)) {
+            playSfx('upgrade')
             pushToast('info', 'UPGRADED', 'Room leveled up.')
             ctx.save()
             ctx.render()
           }
         },
         onDemolish: id => {
+          playSfx('click')
           const refund = computeRefund(ctx.state, id)
           ui.modal = {
             kind: 'confirm',
             title: 'DEMOLISH',
             body: `Refund: ${fmt(refund)} caps. Assigned dwellers become idle.`,
             onConfirm: () => {
+              playSfx('demolish')
               demolishRoom(ctx.state, id)
               if (ui.expandedRoomId === id) ui.expandedRoomId = null
               ctx.save()
               ctx.render()
             },
           }
-          ctx.render()
+          renderOverlays(ctx)
         },
         onOpenDweller: id => {
+          playSfx('click')
           ui.modal = { kind: 'dweller', dwellerId: id }
-          ctx.render()
+          renderOverlays(ctx)
         },
       }),
     ),
   )
 
   const dwellers = dwellerList(ctx.state, id => {
+    playSfx('click')
     ui.modal = { kind: 'dweller', dwellerId: id }
-    ctx.render()
+    renderOverlays(ctx)
   })
 
   const main = h('main', { class: 'main' }, rooms, dwellers)
@@ -182,30 +215,41 @@ export function render(ctx: RenderCtx): void {
   }
   root.appendChild(log)
 
+  restoreScrolls(root, scrolls)
+}
+
+export function renderOverlays(ctx: RenderCtx): void {
+  const overlays = document.getElementById('overlays')
+  if (!overlays) return
+  clear(overlays)
+
   if (ui.modal?.kind === 'build') {
-    document.body.appendChild(
+    overlays.appendChild(
       buildMenu(
         ctx.state,
         typeId => {
           const r = buildRoom(ctx.state, typeId)
           if (r) {
+            playSfx('build')
             pushToast('info', 'BUILT', 'Room added.')
             ctx.save()
+            ctx.render()
           }
         },
         () => {
           ui.modal = null
-          ctx.render()
+          renderOverlays(ctx)
         },
       ),
     )
   } else if (ui.modal?.kind === 'dweller') {
     const did = ui.modal.dwellerId
-    document.body.appendChild(
+    overlays.appendChild(
       dwellerModal(
         ctx.state,
         did,
         (dwellerId, roomId) => {
+          playSfx('assign')
           if (roomId) assignDweller(ctx.state, dwellerId, roomId)
           else unassignDweller(ctx.state, dwellerId)
           ctx.save()
@@ -213,48 +257,64 @@ export function render(ctx: RenderCtx): void {
         },
         () => {
           ui.modal = null
-          ctx.render()
+          renderOverlays(ctx)
         },
+      ),
+    )
+  } else if (ui.modal?.kind === 'gear') {
+    overlays.appendChild(
+      gearMenu(
+        () => openResetConfirm(ctx),
+        () => {
+          ui.modal = null
+          renderOverlays(ctx)
+        },
+        () => renderOverlays(ctx),
       ),
     )
   } else if (ui.modal?.kind === 'confirm') {
     const m = ui.modal
-    document.body.appendChild(
+    overlays.appendChild(
       confirmModal(m.title, m.body, m.onConfirm, () => {
         ui.modal = null
-        ctx.render()
+        renderOverlays(ctx)
       }),
     )
   }
 
   if (ui.assignMenu) {
     const am = ui.assignMenu
-    document.body.appendChild(
+    overlays.appendChild(
       assignMenu(
         ctx.state,
         am.roomId,
         am.x,
         am.y,
         dId => {
+          playSfx('assign')
           assignDweller(ctx.state, dId, am.roomId)
           ctx.save()
+          ctx.render()
         },
         () => {
           ui.assignMenu = null
-          ctx.render()
+          renderOverlays(ctx)
         },
       ),
     )
   }
 
-  document.body.appendChild(toastList(ctx.render))
+  overlays.appendChild(toastList(() => renderOverlays(ctx)))
 
-  const firstFocusable = document.querySelector<HTMLElement>(
-    '.modal [autofocus], .modal .close, .modal button, .modal select, .modal input',
-  )
-  if (firstFocusable && document.activeElement === document.body) {
-    firstFocusable.focus()
+  const autoFocus = overlays.querySelector<HTMLElement>('[autofocus], .modal .close')
+  if (autoFocus && !overlays.contains(document.activeElement)) {
+    autoFocus.focus()
   }
+}
+
+export function render(ctx: RenderCtx): void {
+  renderApp(ctx)
+  renderOverlays(ctx)
 }
 
 export function installGlobalKeyboard(handler: (key: string) => void): void {

@@ -3,6 +3,7 @@ import { MAX_TOASTS } from '../State/GameState'
 export type Modal =
   | { kind: 'build' }
   | { kind: 'dweller'; dwellerId: string }
+  | { kind: 'gear' }
   | { kind: 'confirm'; title: string; body: string; onConfirm: () => void }
   | null
 
@@ -20,12 +21,35 @@ export interface AssignMenu {
   y: number
 }
 
+export interface Prefs {
+  soundEnabled: boolean
+}
+
 export interface UiState {
   expandedRoomId: string | null
   modal: Modal
   toasts: Toast[]
   assignMenu: AssignMenu | null
-  collapseAll: boolean
+  prefs: Prefs
+}
+
+const PREFS_KEY = 'bunkergame_prefs'
+
+function loadPrefs(): Prefs {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY)
+    if (raw) {
+      const p = JSON.parse(raw)
+      return { soundEnabled: p.soundEnabled !== false }
+    }
+  } catch {}
+  return { soundEnabled: true }
+}
+
+export function savePrefs(): void {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify(ui.prefs))
+  } catch {}
 }
 
 export const ui: UiState = {
@@ -33,7 +57,7 @@ export const ui: UiState = {
   modal: null,
   toasts: [],
   assignMenu: null,
-  collapseAll: false,
+  prefs: loadPrefs(),
 }
 
 let toastSeq = 0
@@ -64,5 +88,4 @@ export function resetUi(): void {
   ui.modal = null
   ui.toasts = []
   ui.assignMenu = null
-  ui.collapseAll = false
 }
