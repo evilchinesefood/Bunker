@@ -1,5 +1,6 @@
 import type { GameState, Room } from '../../State/GameState'
 import { ROOM_CATALOG, slotsAtLevel, upgradeCost } from '../../Domain/Rooms'
+import { TICKS_PER_MINUTE } from '../../State/GameState'
 import { h, icon, fmt } from '../Dom'
 import { ui } from '../UiState'
 
@@ -19,15 +20,34 @@ export function roomCard(state: GameState, room: Room, handlers: RoomHandlers): 
 
   const cls = `room${expanded ? ' expanded' : ''}${room.fireActive ? ' fire' : ''}`
 
+  const assignedSet = new Set(room.assigned)
+  const assignedDwellers = room.assigned
+    .map(id => state.dwellers.find(x => x.id === id))
+    .filter((d): d is NonNullable<typeof d> => !!d)
+
+  let pairsInside = 0
+  let singlesInside = 0
+  const pairedIds = new Set<string>()
+  if (type.kind === 'housing') {
+    for (const d of assignedDwellers) {
+      if (pairedIds.has(d.id)) continue
+      if (d.partnerId && assignedSet.has(d.partnerId)) {
+        pairsInside += 1
+        pairedIds.add(d.id)
+        pairedIds.add(d.partnerId)
+      } else {
+        singlesInside += 1
+      }
+    }
+  }
+
   let prodText = ''
+  let prodEl: HTMLElement | null = null
   if (type.produces && room.assigned.length > 0) {
     const aff = type.affinity
     let sum = 0
     if (aff) {
-      for (const id of room.assigned) {
-        const d = state.dwellers.find(x => x.id === id)
-        if (d) sum += d.stats[aff]
-      }
+      for (const d of assignedDwellers) sum += d.stats[aff]
     } else {
       sum = room.assigned.length * 5
     }
@@ -37,7 +57,25 @@ export function roomCard(state: GameState, room: Room, handlers: RoomHandlers): 
   } else if (type.trainsStat) {
     prodText = `Trains ${type.trainsStat.toUpperCase()}`
   } else if (type.kind === 'housing') {
-    prodText = `Housing ${slots}`
+    const parts: HTMLElement[] = []
+    if (pairsInside > 0) {
+      parts.push(
+        h(
+          'span',
+          { class: 'pair-tally' },
+          icon('fa-heart', 'pair-mark'),
+          ` ${pairsInside} pair${pairsInside === 1 ? '' : 's'}`,
+        ),
+      )
+    }
+    if (singlesInside > 0) {
+      parts.push(h('span', { class: 'single-tally' }, icon('fa-user'), ` ${singlesInside} solo`))
+    }
+    if (parts.length === 0) {
+      prodText = `${slots} beds — empty`
+    } else {
+      prodEl = h('div', { class: 'prod housing-tally' }, ...parts)
+    }
   } else if (type.kind === 'lounge') {
     prodText = 'Happiness ↑'
   }
@@ -64,7 +102,7 @@ export function roomCard(state: GameState, room: Room, handlers: RoomHandlers): 
       },
       assignedBadge,
     ),
-    h('div', { class: 'prod' }, prodText),
+    prodEl ?? h('div', { class: 'prod' }, prodText),
     h(
       'div',
       { class: `hp${room.hp < 40 ? ' low' : ''}` },
@@ -100,16 +138,20 @@ export function roomCard(state: GameState, room: Room, handlers: RoomHandlers): 
     for (const dId of room.assigned) {
       const d = state.dwellers.find(x => x.id === dId)
       if (!d) continue
+      const pairedHere =
+        type.kind === 'housing' && d.partnerId ? assignedSet.has(d.partnerId) : false
+      const preg = state.pregnancies.find(p => p.motherId === d.id)
+      const pregMin = preg ? Math.max(1, Math.round(preg.ticksRemaining / TICKS_PER_MINUTE)) : null
       slotEls.push(
         h(
           'span',
-          { class: 'chip' },
+          { class: `chip${pairedHere ? ' paired' : ''}${preg ? ' pregnant' : ''}` },
           h(
             'button',
             {
               class: 'chip-main',
               type: 'button',
-              'aria-label': `Open ${d.name}`,
+              'aria-label': `Open ${d.name}${pairedHere ? ', paired' : ''}${pregMin ? `, due in ${pregMin} min` : ''}`,
               onclick: ((e: Event) => {
                 e.stopPropagation()
                 handlers.onOpenDweller(d.id)
@@ -117,6 +159,8 @@ export function roomCard(state: GameState, room: Room, handlers: RoomHandlers): 
             },
             icon('fa-user'),
             ` ${d.name}`,
+            pairedHere ? icon('fa-heart', 'pair-mark') : null,
+            pregMin ? h('span', { class: 'preg-eta' }, ` ${pregMin}m`) : null,
           ),
           h(
             'button',

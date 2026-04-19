@@ -339,6 +339,37 @@ button {
   background: var(--bad);
   color: var(--bg);
 }
+.chip .pair-mark {
+  color: var(--good);
+  margin-left: 4px;
+  font-size: 10px;
+}
+.chip .preg-eta {
+  color: var(--good);
+  font-size: 10px;
+  margin-left: 4px;
+}
+.chip.paired {
+  border-color: var(--good);
+}
+.chip.pregnant {
+  border-color: var(--good);
+  background: rgba(102, 255, 170, 0.06);
+}
+.housing-tally {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.housing-tally .pair-tally {
+  color: var(--good);
+}
+.housing-tally .pair-tally .pair-mark {
+  margin-right: 2px;
+}
+.housing-tally .single-tally {
+  color: var(--fg-dim);
+}
 .chip.empty {
   color: var(--fg-dim);
   border-style: dashed;
