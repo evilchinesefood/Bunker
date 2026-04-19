@@ -2,13 +2,15 @@ import type { GameState, ResourceId, StatId, Dweller, Room } from '../State/Game
 import {
   CHILD_TO_ADULT_DAYS,
   FOOD_PER_TICK,
+  POWER_BOOST_MULT,
   SHORTAGE_GRACE_TICKS,
   TICKS_PER_DAY,
   WATER_PER_TICK,
   XP_PER_TICK,
   XP_TO_STAT,
 } from '../State/GameState'
-import { ROOM_CATALOG, statContribution } from '../Domain/Rooms'
+import type { PowerStatus } from '../Domain/Rooms'
+import { ROOM_CATALOG, computePowerStatus, statContribution } from '../Domain/Rooms'
 import { pushLog } from '../State/Reducers'
 import { rollEventsOncePerMinute, tickActiveEvents } from './Events'
 import { advancePregnancies, tryPairingAndConceive, rollRecruit } from './Pregnancy'
@@ -36,12 +38,13 @@ export function tick(state: GameState): TickResult {
   const result: TickResult = { shortages: [], deaths: [], levelUps: [] }
   state.tick += 1
   const maps = buildMaps(state)
+  const power = computePowerStatus(state.rooms, state.resources.power, state.resourceCaps.power)
 
-  production(state, maps.dwellerById)
+  production(state, maps.dwellerById, power)
   const shortages = consumption(state)
   result.shortages = shortages
   needDecay(state, shortages, result, maps.dwellerById, maps.roomById)
-  statTraining(state, maps.dwellerById, result)
+  statTraining(state, maps.dwellerById, result, power)
   advancePregnancies(state, maps.dwellerById)
   tryPairingAndConceive(state, maps.dwellerById)
   aging(state)
@@ -53,11 +56,13 @@ export function tick(state: GameState): TickResult {
   return result
 }
 
-function production(state: GameState, dwellerById: Map<string, Dweller>): void {
+function production(state: GameState, dwellerById: Map<string, Dweller>, power: PowerStatus): void {
+  const mult = power.boosted ? POWER_BOOST_MULT : 1
   for (const room of state.rooms) {
     if (room.assigned.length === 0 || room.hp <= 0) continue
     const type = ROOM_CATALOG[room.typeId]
     if (!type.produces) continue
+    if (power.dark && type.produces !== 'power') continue
 
     let sum = 0
     for (const id of room.assigned) {
@@ -65,7 +70,7 @@ function production(state: GameState, dwellerById: Map<string, Dweller>): void {
       if (d) sum += statContribution(d.stats, type.affinity)
     }
     const avg = sum / room.assigned.length
-    const produced = type.baseProduction * room.level * avg * room.assigned.length
+    const produced = type.baseProduction * room.level * avg * room.assigned.length * mult
     if (type.produces === 'caps') {
       state.caps += produced
     } else {
@@ -74,22 +79,26 @@ function production(state: GameState, dwellerById: Map<string, Dweller>): void {
     }
   }
 
-  for (const room of state.rooms) {
-    const type = ROOM_CATALOG[room.typeId]
-    if (type.kind !== 'medbay' || room.assigned.length === 0) continue
-    const docs: Dweller[] = []
-    for (const id of room.assigned) {
-      const d = dwellerById.get(id)
-      if (d) docs.push(d)
-    }
-    const heal = MEDBAY_HEAL_PER_TICK * room.level
-    const bonus = docs.reduce((s, dr) => s + dr.stats.int, 0) / 10
-    for (const d of state.dwellers) {
-      if (d.hp >= 100) continue
-      if (d.hp > 60 && docs.length === 0) continue
-      d.hp = Math.min(100, d.hp + heal + bonus * 0.05)
+  if (!power.dark) {
+    for (const room of state.rooms) {
+      const type = ROOM_CATALOG[room.typeId]
+      if (type.kind !== 'medbay' || room.assigned.length === 0) continue
+      const docs: Dweller[] = []
+      for (const id of room.assigned) {
+        const d = dwellerById.get(id)
+        if (d) docs.push(d)
+      }
+      const heal = MEDBAY_HEAL_PER_TICK * room.level * mult
+      const bonus = docs.reduce((s, dr) => s + dr.stats.int, 0) / 10
+      for (const d of state.dwellers) {
+        if (d.hp >= 100) continue
+        if (d.hp > 60 && docs.length === 0) continue
+        d.hp = Math.min(100, d.hp + heal + bonus * 0.05 * mult)
+      }
     }
   }
+
+  state.resources.power = Math.max(0, state.resources.power - power.totalDraw)
 }
 
 function consumption(state: GameState): ResourceId[] {
@@ -153,7 +162,10 @@ function statTraining(
   state: GameState,
   dwellerById: Map<string, Dweller>,
   result: TickResult,
+  power: PowerStatus,
 ): void {
+  if (power.dark) return
+  const mult = power.boosted ? POWER_BOOST_MULT : 1
   for (const room of state.rooms) {
     const type = ROOM_CATALOG[room.typeId]
     let target: StatId | null = null
@@ -169,7 +181,7 @@ function statTraining(
     for (const id of room.assigned) {
       const d = dwellerById.get(id)
       if (!d || d.stats[target] >= 10) continue
-      d.xp[target] += XP_PER_TICK * room.level
+      d.xp[target] += XP_PER_TICK * room.level * mult
       if (d.xp[target] >= XP_TO_STAT) {
         d.xp[target] -= XP_TO_STAT
         d.stats[target] += 1

@@ -122,6 +122,14 @@ button {
 .hud .res.bad .val {
   color: var(--bad);
 }
+.hud .res.boosted {
+  border-color: var(--good);
+  box-shadow: 0 0 8px rgba(102, 255, 170, 0.35);
+}
+.hud .res.boosted .val,
+.hud .res.boosted .label {
+  color: var(--good);
+}
 .hud .caps {
   display: flex;
   align-items: center;
@@ -226,6 +234,29 @@ button {
 .room.fire {
   border-color: var(--bad);
   animation: flameborder 1s infinite;
+}
+.room.dark {
+  opacity: 0.55;
+  border-color: var(--border-dim);
+}
+.room.boosted {
+  border-color: var(--good);
+  box-shadow: 0 0 10px rgba(102, 255, 170, 0.3);
+}
+.power-tag {
+  padding: 2px 8px;
+  font-size: 10px;
+  letter-spacing: 1px;
+  border: 1px solid var(--border-dim);
+  text-transform: uppercase;
+}
+.power-tag.dark {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+.power-tag.boosted {
+  color: var(--good);
+  border-color: var(--good);
 }
 @keyframes flameborder {
   0%,

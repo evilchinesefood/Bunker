@@ -1,6 +1,12 @@
 import type { GameState, Room } from '../../State/GameState'
-import { ROOM_CATALOG, slotsAtLevel, statContribution, upgradeCost } from '../../Domain/Rooms'
-import { TICKS_PER_MINUTE } from '../../State/GameState'
+import {
+  ROOM_CATALOG,
+  computePowerStatus,
+  slotsAtLevel,
+  statContribution,
+  upgradeCost,
+} from '../../Domain/Rooms'
+import { POWER_BOOST_MULT, TICKS_PER_MINUTE } from '../../State/GameState'
 import { h, icon, fmt } from '../Dom'
 import { ui } from '../UiState'
 
@@ -17,8 +23,12 @@ export function roomCard(state: GameState, room: Room, handlers: RoomHandlers): 
   const type = ROOM_CATALOG[room.typeId]
   const slots = slotsAtLevel(type, room.level)
   const expanded = ui.expandedRoomId === room.id
+  const power = computePowerStatus(state.rooms, state.resources.power, state.resourceCaps.power)
+  const affected = type.kind !== 'housing' && type.id !== 'power_plant'
+  const isDark = affected && power.dark && room.assigned.length > 0
+  const isBoosted = affected && power.boosted && room.assigned.length > 0
 
-  const cls = `room${expanded ? ' expanded' : ''}${room.fireActive ? ' fire' : ''}`
+  const cls = `room${expanded ? ' expanded' : ''}${room.fireActive ? ' fire' : ''}${isDark ? ' dark' : ''}${isBoosted ? ' boosted' : ''}`
 
   const assignedSet = new Set(room.assigned)
   const assignedDwellers = room.assigned
@@ -47,7 +57,8 @@ export function roomCard(state: GameState, room: Room, handlers: RoomHandlers): 
     let sum = 0
     for (const d of assignedDwellers) sum += statContribution(d.stats, type.affinity)
     const avg = sum / room.assigned.length
-    const per = type.baseProduction * room.level * avg * room.assigned.length
+    const mult = isBoosted ? POWER_BOOST_MULT : isDark && type.produces !== 'power' ? 0 : 1
+    const per = type.baseProduction * room.level * avg * room.assigned.length * mult
     prodText = `+${(per * 60).toFixed(1)}/m ${type.produces}`
   } else if (type.trainsStat) {
     prodText = `Trains ${type.trainsStat.toUpperCase()}`
@@ -95,6 +106,8 @@ export function roomCard(state: GameState, room: Room, handlers: RoomHandlers): 
       },
       assignedBadge,
     ),
+    isDark ? h('span', { class: 'power-tag dark' }, 'NO POWER') : null,
+    isBoosted ? h('span', { class: 'power-tag boosted' }, 'BOOSTED') : null,
     prodEl ?? h('div', { class: 'prod' }, prodText),
     h(
       'div',

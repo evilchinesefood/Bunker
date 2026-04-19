@@ -17,7 +17,7 @@ import {
   unassignDweller,
   upgradeRoom,
 } from '../State/Reducers'
-import { ROOM_CATALOG, upgradeCost } from '../Domain/Rooms'
+import { ROOM_CATALOG, computePowerStatus, upgradeCost } from '../Domain/Rooms'
 import { playSfx } from './Audio'
 
 const SEV_PREFIX: Record<string, string> = { warn: '[!]', bad: '[X]', good: '[+]', info: '[*]' }
@@ -78,9 +78,15 @@ export function renderApp(ctx: RenderCtx): void {
 
   root.appendChild(resourceBar(ctx.state, () => openGearMenu(ctx)))
 
+  const power = computePowerStatus(
+    ctx.state.rooms,
+    ctx.state.resources.power,
+    ctx.state.resourceCaps.power,
+  )
   const shortages: string[] = []
   if (ctx.state.resources.water <= 0) shortages.push('WATER — DWELLERS DEHYDRATING')
   if (ctx.state.resources.food <= 0) shortages.push('FOOD — DWELLERS STARVING')
+  if (power.dark) shortages.push('POWER — ROOMS OFFLINE')
   if (shortages.length) {
     root.appendChild(
       h(

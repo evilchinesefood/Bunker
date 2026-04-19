@@ -1,4 +1,5 @@
-import type { ResourceId, StatId } from '../State/GameState'
+import type { ResourceId, Room, StatId } from '../State/GameState'
+import { POWER_BOOST_THRESHOLD, POWER_DRAW_BASE, POWER_DRAW_RADIO } from '../State/GameState'
 
 export type RoomKind = 'production' | 'housing' | 'medbay' | 'currency' | 'training' | 'radio'
 
@@ -237,4 +238,27 @@ export function statContribution(stats: Record<StatId, number>, affinity: RoomAf
   if (affinity === 'all') return (stats.str + stats.int + stats.end + stats.cha) / 4
   if (affinity) return stats[affinity]
   return 5
+}
+
+export function roomPowerDraw(type: RoomType, level: 1 | 2 | 3): number {
+  if (type.kind === 'housing' || type.id === 'power_plant') return 0
+  const base = type.id === 'radio' ? POWER_DRAW_RADIO : POWER_DRAW_BASE
+  return base * level
+}
+
+export interface PowerStatus {
+  totalDraw: number
+  dark: boolean
+  boosted: boolean
+}
+
+export function computePowerStatus(rooms: Room[], power: number, powerCap: number): PowerStatus {
+  let totalDraw = 0
+  for (const r of rooms) {
+    if (r.assigned.length === 0) continue
+    totalDraw += roomPowerDraw(ROOM_CATALOG[r.typeId], r.level)
+  }
+  const dark = totalDraw > 0 && power < totalDraw
+  const boosted = powerCap > 0 && power >= POWER_BOOST_THRESHOLD * powerCap
+  return { totalDraw, dark, boosted }
 }

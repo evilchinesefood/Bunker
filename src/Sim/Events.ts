@@ -1,4 +1,5 @@
 import type { GameState, Dweller, Room } from '../State/GameState'
+import { POWER_LOW_EVENT_MULT, POWER_LOW_THRESHOLD } from '../State/GameState'
 import { ROOM_CATALOG } from '../Domain/Rooms'
 import { rand, pick, uuid } from '../Domain/Rng'
 import { pushLog } from '../State/Reducers'
@@ -6,6 +7,7 @@ import { pushLog } from '../State/Reducers'
 export const FIRE_DURATION_TICKS = 30
 export const FIRE_HP_ROOM_PER_TICK = 1.5
 export const FIRE_HP_DWELLER_PER_TICK = 0.6
+const FIRE_BASE_CHANCE = 0.04
 
 export function rollEventsOncePerMinute(state: GameState): void {
   if (state.tick % 60 !== 0 || state.tick === 0) return
@@ -17,7 +19,10 @@ export function rollEventsOncePerMinute(state: GameState): void {
   })
   if (eligible.length === 0) return
 
-  if (rand(state) >= 0.04) return
+  const cap = state.resourceCaps.power
+  const lowPower = cap > 0 && state.resources.power < POWER_LOW_THRESHOLD * cap
+  const threshold = lowPower ? FIRE_BASE_CHANCE * POWER_LOW_EVENT_MULT : FIRE_BASE_CHANCE
+  if (rand(state) >= threshold) return
   const target = pick(state, eligible)
   target.fireActive = true
   state.activeEvents.push({
