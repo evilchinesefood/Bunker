@@ -51,7 +51,7 @@ export function assignDweller(state: GameState, dwellerId: string, roomId: strin
   r.assigned.push(dwellerId)
   d.location = roomId
   if (rt.kind === 'training') d.status = 'training'
-  else if (rt.kind === 'housing' || rt.kind === 'lounge') d.status = 'idle'
+  else if (rt.kind === 'housing') d.status = 'idle'
   else d.status = 'working'
   return true
 }

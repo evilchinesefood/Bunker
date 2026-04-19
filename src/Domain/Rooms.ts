@@ -1,20 +1,15 @@
 import type { ResourceId, StatId } from '../State/GameState'
 
-export type RoomKind =
-  | 'production'
-  | 'housing'
-  | 'medbay'
-  | 'currency'
-  | 'training'
-  | 'lounge'
-  | 'radio'
+export type RoomKind = 'production' | 'housing' | 'medbay' | 'currency' | 'training' | 'radio'
+
+export type RoomAffinity = StatId | 'all' | null
 
 export interface RoomType {
   id: string
   name: string
   icon: string
   kind: RoomKind
-  affinity: StatId | null
+  affinity: RoomAffinity
   produces: ResourceId | 'caps' | null
   trainsStat: StatId | null
   baseCapacity: number
@@ -41,7 +36,8 @@ export const ROOM_CATALOG: Record<string, RoomType> = {
     upgradeCostMult: 2,
     demolishRefundPct: 0.5,
     capBoostPerLevel: { power: 50 },
-    description: 'Produces power. Each level also raises power cap.',
+    description:
+      'Keeps the bunker powered. Produces power and raises the power cap per level. Assign high-STR dwellers.',
   },
   water_treatment: {
     id: 'water_treatment',
@@ -57,14 +53,15 @@ export const ROOM_CATALOG: Record<string, RoomType> = {
     upgradeCostMult: 2,
     demolishRefundPct: 0.5,
     capBoostPerLevel: { water: 50 },
-    description: 'Produces water. Each level also raises water cap.',
+    description:
+      'Purifies drinkable water. Produces water and raises the water cap per level. Assign high-INT dwellers.',
   },
   hydroponics: {
     id: 'hydroponics',
     name: 'Hydroponics',
     icon: 'fa-seedling',
     kind: 'production',
-    affinity: 'int',
+    affinity: 'end',
     produces: 'food',
     trainsStat: null,
     baseCapacity: 2,
@@ -73,7 +70,8 @@ export const ROOM_CATALOG: Record<string, RoomType> = {
     upgradeCostMult: 2,
     demolishRefundPct: 0.5,
     capBoostPerLevel: { food: 50 },
-    description: 'Produces food. Each level also raises food cap.',
+    description:
+      'Grows food for the population. Produces food and raises the food cap per level. Assign high-END dwellers.',
   },
   quarters: {
     id: 'quarters',
@@ -89,7 +87,8 @@ export const ROOM_CATALOG: Record<string, RoomType> = {
     upgradeCostMult: 2,
     demolishRefundPct: 0.5,
     capBoostPerLevel: {},
-    description: 'Housing capacity. Paired dwellers here can conceive.',
+    description:
+      'Houses dwellers and expands your population cap. No output; paired dwellers here can conceive. Assign couples.',
   },
   medbay: {
     id: 'medbay',
@@ -105,14 +104,15 @@ export const ROOM_CATALOG: Record<string, RoomType> = {
     upgradeCostMult: 2,
     demolishRefundPct: 0.5,
     capBoostPerLevel: {},
-    description: 'Heals sick and injured dwellers.',
+    description:
+      'Treats the sick and injured. No resource output; heals HP over time. Assign high-INT dwellers.',
   },
   workshop: {
     id: 'workshop',
     name: 'Workshop',
     icon: 'fa-hammer',
     kind: 'currency',
-    affinity: 'str',
+    affinity: 'all',
     produces: 'caps',
     trainsStat: null,
     baseCapacity: 2,
@@ -121,7 +121,8 @@ export const ROOM_CATALOG: Record<string, RoomType> = {
     upgradeCostMult: 2,
     demolishRefundPct: 0.5,
     capBoostPerLevel: {},
-    description: 'Produces caps (build currency).',
+    description:
+      'Builds and tinkers for profit. Produces caps (build currency). All four stats contribute — balanced dwellers excel.',
   },
   gym: {
     id: 'gym',
@@ -137,7 +138,8 @@ export const ROOM_CATALOG: Record<string, RoomType> = {
     upgradeCostMult: 2,
     demolishRefundPct: 0.5,
     capBoostPerLevel: {},
-    description: 'Trains STR of assigned dwellers.',
+    description:
+      'Strength training room. No output; trains STR of assigned dwellers. Use anyone whose STR you want to grow.',
   },
   classroom: {
     id: 'classroom',
@@ -153,7 +155,8 @@ export const ROOM_CATALOG: Record<string, RoomType> = {
     upgradeCostMult: 2,
     demolishRefundPct: 0.5,
     capBoostPerLevel: {},
-    description: 'Trains INT of assigned dwellers.',
+    description:
+      'Study hall. No output; trains INT of assigned dwellers. Use anyone whose INT you want to grow.',
   },
   track: {
     id: 'track',
@@ -169,7 +172,8 @@ export const ROOM_CATALOG: Record<string, RoomType> = {
     upgradeCostMult: 2,
     demolishRefundPct: 0.5,
     capBoostPerLevel: {},
-    description: 'Trains END of assigned dwellers.',
+    description:
+      'Endurance training. No output; trains END of assigned dwellers. Use anyone whose END you want to grow.',
   },
   bar: {
     id: 'bar',
@@ -185,23 +189,8 @@ export const ROOM_CATALOG: Record<string, RoomType> = {
     upgradeCostMult: 2,
     demolishRefundPct: 0.5,
     capBoostPerLevel: {},
-    description: 'Trains CHA + small happiness boost to assigned.',
-  },
-  lounge: {
-    id: 'lounge',
-    name: 'Lounge',
-    icon: 'fa-couch',
-    kind: 'lounge',
-    affinity: null,
-    produces: null,
-    trainsStat: null,
-    baseCapacity: 3,
-    baseProduction: 0,
-    baseCost: 100,
-    upgradeCostMult: 2,
-    demolishRefundPct: 0.5,
-    capBoostPerLevel: {},
-    description: 'Idle dwellers here recover happiness passively.',
+    description:
+      'Social hangout. No output; trains CHA of assigned dwellers. Use anyone whose CHA you want to grow.',
   },
   radio: {
     id: 'radio',
@@ -217,7 +206,8 @@ export const ROOM_CATALOG: Record<string, RoomType> = {
     upgradeCostMult: 2,
     demolishRefundPct: 0.5,
     capBoostPerLevel: {},
-    description: 'Boosts walk-up recruit chance + small caps trickle.',
+    description:
+      'Broadcasts to the wasteland. Boosts walk-up recruit chance with a small caps trickle. Assign high-CHA dwellers.',
   },
 }
 
@@ -232,7 +222,6 @@ export const BUILDABLE_ORDER = [
   'classroom',
   'track',
   'bar',
-  'lounge',
   'radio',
 ]
 
@@ -242,4 +231,10 @@ export function upgradeCost(type: RoomType, currentLevel: 1 | 2 | 3): number {
 
 export function slotsAtLevel(type: RoomType, level: 1 | 2 | 3): number {
   return type.baseCapacity + (level - 1)
+}
+
+export function statContribution(stats: Record<StatId, number>, affinity: RoomAffinity): number {
+  if (affinity === 'all') return (stats.str + stats.int + stats.end + stats.cha) / 4
+  if (affinity) return stats[affinity]
+  return 5
 }

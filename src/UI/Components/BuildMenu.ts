@@ -6,7 +6,7 @@ const GROUPS: Array<{ title: string; kinds: string[] }> = [
   { title: 'Production', kinds: ['production', 'currency'] },
   { title: 'Housing', kinds: ['housing'] },
   { title: 'Training', kinds: ['training'] },
-  { title: 'Utility', kinds: ['medbay', 'lounge', 'radio'] },
+  { title: 'Utility', kinds: ['medbay', 'radio'] },
 ]
 
 export function buildMenu(

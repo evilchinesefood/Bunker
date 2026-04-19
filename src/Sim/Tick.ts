@@ -8,7 +8,7 @@ import {
   XP_PER_TICK,
   XP_TO_STAT,
 } from '../State/GameState'
-import { ROOM_CATALOG } from '../Domain/Rooms'
+import { ROOM_CATALOG, statContribution } from '../Domain/Rooms'
 import { pushLog } from '../State/Reducers'
 import { rollEventsOncePerMinute, tickActiveEvents } from './Events'
 import { advancePregnancies, tryPairingAndConceive, rollRecruit } from './Pregnancy'
@@ -20,9 +20,6 @@ export interface TickResult {
 }
 
 const SHORTAGE_HP_LOSS_PER_TICK = 0.15
-const SHORTAGE_HAPPY_LOSS_PER_TICK = 0.4
-const BAR_HAPPY_BONUS = 0.15
-const LOUNGE_HAPPY_BONUS = 0.25
 const MEDBAY_HEAL_PER_TICK = 0.6
 
 const shortageStart: Record<ResourceId, number | null> = { power: null, water: null, food: null }
@@ -62,15 +59,10 @@ function production(state: GameState, dwellerById: Map<string, Dweller>): void {
     const type = ROOM_CATALOG[room.typeId]
     if (!type.produces) continue
 
-    const aff = type.affinity
     let sum = 0
-    if (aff) {
-      for (const id of room.assigned) {
-        const d = dwellerById.get(id)
-        if (d) sum += d.stats[aff]
-      }
-    } else {
-      sum = room.assigned.length * 5
+    for (const id of room.assigned) {
+      const d = dwellerById.get(id)
+      if (d) sum += statContribution(d.stats, type.affinity)
     }
     const avg = sum / room.assigned.length
     const produced = type.baseProduction * room.level * avg * room.assigned.length
@@ -127,30 +119,12 @@ function needDecay(
     const start = shortageStart[res]
     if (start !== null && state.tick - start >= SHORTAGE_GRACE_TICKS) penaltyFactor += 1
   }
-  const happyPressure = shortages.length
 
   for (const d of state.dwellers) {
-    let happyChange = 0
-    let hpChange = 0
-
-    if (happyPressure > 0) happyChange -= SHORTAGE_HAPPY_LOSS_PER_TICK * happyPressure
     if (penaltyFactor > 0) {
-      hpChange -= SHORTAGE_HP_LOSS_PER_TICK * penaltyFactor * (11 - d.stats.end) * 0.1
+      const hpLoss = SHORTAGE_HP_LOSS_PER_TICK * penaltyFactor * (11 - d.stats.end) * 0.1
+      d.hp = clamp(d.hp - hpLoss, 0, 100)
     }
-
-    if (d.location) {
-      const r = roomById.get(d.location)
-      if (r) {
-        const t = ROOM_CATALOG[r.typeId]
-        if (t.id === 'bar') happyChange += BAR_HAPPY_BONUS
-        if (t.id === 'lounge') happyChange += LOUNGE_HAPPY_BONUS
-      }
-    } else if (happyPressure === 0) {
-      happyChange += 0.04
-    }
-
-    d.happiness = clamp(d.happiness + happyChange, 0, 100)
-    d.hp = clamp(d.hp + hpChange, 0, 100)
 
     if (d.hp <= 0) {
       result.deaths.push(d.id)
@@ -184,7 +158,11 @@ function statTraining(
     const type = ROOM_CATALOG[room.typeId]
     let target: StatId | null = null
     if (type.kind === 'training' && type.trainsStat) target = type.trainsStat
-    else if (type.affinity && (type.produces || type.kind === 'medbay' || type.kind === 'radio')) {
+    else if (
+      type.affinity &&
+      type.affinity !== 'all' &&
+      (type.produces || type.kind === 'medbay' || type.kind === 'radio')
+    ) {
       target = type.affinity
     }
     if (!target) continue

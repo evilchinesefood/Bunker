@@ -1,5 +1,5 @@
 import type { GameState, Room } from '../../State/GameState'
-import { ROOM_CATALOG, slotsAtLevel, upgradeCost } from '../../Domain/Rooms'
+import { ROOM_CATALOG, slotsAtLevel, statContribution, upgradeCost } from '../../Domain/Rooms'
 import { TICKS_PER_MINUTE } from '../../State/GameState'
 import { h, icon, fmt } from '../Dom'
 import { ui } from '../UiState'
@@ -44,13 +44,8 @@ export function roomCard(state: GameState, room: Room, handlers: RoomHandlers): 
   let prodText = ''
   let prodEl: HTMLElement | null = null
   if (type.produces && room.assigned.length > 0) {
-    const aff = type.affinity
     let sum = 0
-    if (aff) {
-      for (const d of assignedDwellers) sum += d.stats[aff]
-    } else {
-      sum = room.assigned.length * 5
-    }
+    for (const d of assignedDwellers) sum += statContribution(d.stats, type.affinity)
     const avg = sum / room.assigned.length
     const per = type.baseProduction * room.level * avg * room.assigned.length
     prodText = `+${(per * 60).toFixed(1)}/m ${type.produces}`
@@ -76,13 +71,11 @@ export function roomCard(state: GameState, room: Room, handlers: RoomHandlers): 
     } else {
       prodEl = h('div', { class: 'prod housing-tally' }, ...parts)
     }
-  } else if (type.kind === 'lounge') {
-    prodText = 'Happiness ↑'
   }
 
   const assignedBadge = `${room.assigned.length}/${slots}`
   const emptySlots = slots - room.assigned.length
-  const attention = emptySlots > 0 && type.kind !== 'housing' && type.kind !== 'lounge'
+  const attention = emptySlots > 0 && type.kind !== 'housing'
 
   const row = h(
     'div',
@@ -233,7 +226,13 @@ export function roomCard(state: GameState, room: Room, handlers: RoomHandlers): 
     )
 
     card.appendChild(
-      h('div', { class: 'expand' }, h('div', { class: 'slots' }, ...slotEls), actions),
+      h(
+        'div',
+        { class: 'expand' },
+        h('div', { class: 'room-desc' }, type.description),
+        h('div', { class: 'slots' }, ...slotEls),
+        actions,
+      ),
     )
   }
 

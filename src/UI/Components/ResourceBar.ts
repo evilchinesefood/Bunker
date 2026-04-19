@@ -1,5 +1,5 @@
 import type { GameState, ResourceId } from '../../State/GameState'
-import { ROOM_CATALOG } from '../../Domain/Rooms'
+import { ROOM_CATALOG, statContribution } from '../../Domain/Rooms'
 import { FOOD_PER_TICK, WATER_PER_TICK } from '../../State/GameState'
 import { h, icon, fmt, fmtRate } from '../Dom'
 import { RESOURCE_LABEL, RESOURCE_ICON } from '../../Domain/Resources'
@@ -10,15 +10,10 @@ function netRate(state: GameState, res: ResourceId): number {
     if (r.assigned.length === 0 || r.hp <= 0) continue
     const t = ROOM_CATALOG[r.typeId]
     if (t.produces !== res) continue
-    const aff = t.affinity
     let sum = 0
-    if (aff) {
-      for (const id of r.assigned) {
-        const d = state.dwellers.find(x => x.id === id)
-        if (d) sum += d.stats[aff]
-      }
-    } else {
-      sum = r.assigned.length * 5
+    for (const id of r.assigned) {
+      const d = state.dwellers.find(x => x.id === id)
+      if (d) sum += statContribution(d.stats, t.affinity)
     }
     const avg = sum / r.assigned.length
     prod += t.baseProduction * r.level * avg * r.assigned.length
@@ -34,15 +29,10 @@ function capsRate(state: GameState): number {
     if (r.assigned.length === 0 || r.hp <= 0) continue
     const t = ROOM_CATALOG[r.typeId]
     if (t.produces !== 'caps') continue
-    const aff = t.affinity
     let sum = 0
-    if (aff) {
-      for (const id of r.assigned) {
-        const d = state.dwellers.find(x => x.id === id)
-        if (d) sum += d.stats[aff]
-      }
-    } else {
-      sum = r.assigned.length * 5
+    for (const id of r.assigned) {
+      const d = state.dwellers.find(x => x.id === id)
+      if (d) sum += statContribution(d.stats, t.affinity)
     }
     const avg = sum / r.assigned.length
     per += t.baseProduction * r.level * avg * r.assigned.length

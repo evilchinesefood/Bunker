@@ -105,7 +105,6 @@ function validate(raw: unknown): GameState | null {
         },
         location: typeof d.location === 'string' ? d.location : null,
         hp: clampN(d.hp, 0, 100, 100),
-        happiness: clampN(d.happiness, 0, 100, 50),
         status: asStr(d.status, 'idle') as GameState['dwellers'][number]['status'],
         partnerId: typeof d.partnerId === 'string' ? d.partnerId : null,
         ageDays: asInt(d.ageDays, 0),

@@ -104,7 +104,6 @@ export function makeDweller(state: { rng: number }, opts: Partial<Dweller> = {})
     xp: opts.xp ?? { str: 0, int: 0, end: 0, cha: 0 },
     location: opts.location ?? null,
     hp: opts.hp ?? 100,
-    happiness: opts.happiness ?? 75,
     status: opts.status ?? 'idle',
     partnerId: opts.partnerId ?? null,
     ageDays: opts.ageDays ?? 0,

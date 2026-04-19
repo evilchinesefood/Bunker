@@ -302,6 +302,13 @@ button {
   display: grid;
   gap: 8px;
 }
+.room .room-desc {
+  color: var(--fg-dim);
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 2px 2px 4px;
+  border-bottom: 1px dashed var(--border-dim);
+}
 .slots {
   display: flex;
   flex-wrap: wrap;
@@ -489,9 +496,6 @@ button {
 }
 .bar.hp > span {
   background: var(--bad);
-}
-.bar.happy > span {
-  background: var(--fg);
 }
 
 /* ---- Log ---- */

@@ -17,7 +17,6 @@ export interface Dweller {
   xp: Record<StatId, number>
   location: string | null
   hp: number
-  happiness: number
   status: 'working' | 'idle' | 'sleeping' | 'pregnant' | 'sick' | 'training'
   partnerId: string | null
   ageDays: number

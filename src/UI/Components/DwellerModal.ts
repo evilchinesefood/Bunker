@@ -79,8 +79,6 @@ export function dwellerModal(
         { class: 'meta' },
         h('span', {}, 'HP'),
         h('b', {}, `${Math.round(d.hp)}/100`),
-        h('span', {}, 'Happiness'),
-        h('b', {}, `${Math.round(d.happiness)}/100`),
         h('span', {}, 'Status'),
         h('b', {}, d.isChild ? 'Child' : d.status),
         h('span', {}, 'Age'),

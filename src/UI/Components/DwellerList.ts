@@ -47,18 +47,13 @@ function dwellerRow(state: GameState, d: Dweller, onOpen: (id: string) => void):
     { class: 'bar hp', role: 'img', 'aria-label': `HP ${Math.round(d.hp)}%` },
     h('span', { style: `width:${pct(d.hp)}%` }),
   )
-  const happyBar = h(
-    'div',
-    { class: 'bar happy', role: 'img', 'aria-label': `Happiness ${Math.round(d.happiness)}%` },
-    h('span', { style: `width:${pct(d.happiness)}%` }),
-  )
 
   return h(
     'button',
     {
       class: 'dweller',
       type: 'button',
-      'aria-label': `${d.name}, at ${locName}, HP ${Math.round(d.hp)}, happiness ${Math.round(d.happiness)}`,
+      'aria-label': `${d.name}, at ${locName}, HP ${Math.round(d.hp)}`,
       onclick: (() => onOpen(d.id)) as EventListener,
     },
     h(
@@ -71,6 +66,6 @@ function dwellerRow(state: GameState, d: Dweller, onOpen: (id: string) => void):
     ),
     h('div', { class: 'stat' }, `${d.stats.str}/${d.stats.int}/${d.stats.end}/${d.stats.cha}`),
     h('div', { class: 'loc' }, locName),
-    h('div', { class: 'bars' }, hpBar, happyBar),
+    h('div', { class: 'bars' }, hpBar),
   )
 }

@@ -9,14 +9,13 @@ import {
   TICKS_PER_DAY,
   CHILD_TO_ADULT_DAYS,
 } from '../State/GameState'
-import { ROOM_CATALOG } from '../Domain/Rooms'
+import { ROOM_CATALOG, statContribution } from '../Domain/Rooms'
 import { inheritedStats, generateName, makeDweller } from '../Domain/Dwellers'
 import { pushLog } from '../State/Reducers'
 import { populationCap } from './Pregnancy'
 import { resolveOfflineFires } from './Events'
 
 const OFFLINE_HP_PER_TICK = 0.15
-const OFFLINE_HAPPY_PER_TICK = 0.4
 const SHORTAGE_GRACE_TICKS = 30
 
 export interface OfflineSummary {
@@ -51,15 +50,10 @@ export function runOfflineCatchup(state: GameState): OfflineSummary | null {
     if (room.assigned.length === 0 || room.hp <= 0) continue
     const type = ROOM_CATALOG[room.typeId]
     if (!type.produces) continue
-    const affStat = type.affinity
     let sum = 0
-    if (affStat) {
-      for (const id of room.assigned) {
-        const d = state.dwellers.find(x => x.id === id)
-        if (d) sum += d.stats[affStat]
-      }
-    } else {
-      sum = room.assigned.length * 5
+    for (const id of room.assigned) {
+      const d = state.dwellers.find(x => x.id === id)
+      if (d) sum += statContribution(d.stats, type.affinity)
     }
     const avg = sum / room.assigned.length
     const amt = type.baseProduction * room.level * avg * room.assigned.length
@@ -123,7 +117,11 @@ export function runOfflineCatchup(state: GameState): OfflineSummary | null {
     const type = ROOM_CATALOG[room.typeId]
     let target: StatId | null = null
     if (type.kind === 'training' && type.trainsStat) target = type.trainsStat
-    else if (type.affinity && (type.produces || type.kind === 'medbay' || type.kind === 'radio')) {
+    else if (
+      type.affinity &&
+      type.affinity !== 'all' &&
+      (type.produces || type.kind === 'medbay' || type.kind === 'radio')
+    ) {
       target = type.affinity
     }
     if (!target) continue
@@ -139,16 +137,10 @@ export function runOfflineCatchup(state: GameState): OfflineSummary | null {
     }
   }
 
-  const totalShortageTicks = shortageTicks.water + shortageTicks.food
   const maxShortageStream = Math.max(shortageTicks.water, shortageTicks.food)
   const penaltyTicks = Math.max(0, maxShortageStream - SHORTAGE_GRACE_TICKS)
-  const happyPressure =
-    shortageTicks.water > 0 && shortageTicks.food > 0 ? 2 : totalShortageTicks > 0 ? 1 : 0
-  const happyDelta =
-    -OFFLINE_HAPPY_PER_TICK * Math.min(maxShortageStream, ticks) * happyPressure * 0.1
   const toRemove: string[] = []
   for (const d of state.dwellers) {
-    d.happiness = clamp(d.happiness + happyDelta, 0, 100)
     if (penaltyTicks > 0) {
       const shortageCount = (shortageTicks.water > 0 ? 1 : 0) + (shortageTicks.food > 0 ? 1 : 0)
       const hpLoss = OFFLINE_HP_PER_TICK * penaltyTicks * shortageCount * (11 - d.stats.end) * 0.1

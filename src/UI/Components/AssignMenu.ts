@@ -47,7 +47,7 @@ export function assignMenu(
     const loc = locLabel(d)
     const here = loc === 'Here'
     const stats = (['str', 'int', 'end', 'cha'] as const).map(s =>
-      h('span', { class: affStat === s ? 'stat-hl' : '' }, String(d.stats[s])),
+      h('span', { class: affStat === s || affStat === 'all' ? 'stat-hl' : '' }, String(d.stats[s])),
     )
     return h(
       'button',
