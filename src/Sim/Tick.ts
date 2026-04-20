@@ -178,10 +178,11 @@ function statTraining(
       target = type.affinity
     }
     if (!target) continue
+    const xpMult = type.kind === 'production' ? 1 / 8 : 1
     for (const id of room.assigned) {
       const d = dwellerById.get(id)
       if (!d || d.stats[target] >= 10) continue
-      d.xp[target] += XP_PER_TICK * room.level * mult
+      d.xp[target] += XP_PER_TICK * room.level * mult * xpMult
       if (d.xp[target] >= XP_TO_STAT) {
         d.xp[target] -= XP_TO_STAT
         d.stats[target] += 1

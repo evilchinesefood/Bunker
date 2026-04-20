@@ -11,8 +11,8 @@ export function populationCap(state: GameState): number {
 
 export function tryPairingAndConceive(state: GameState, dwellerById: Map<string, Dweller>): void {
   if (state.tick % 60 !== 0 || state.tick === 0) return
-  if (state.dwellers.length >= populationCap(state)) return
 
+  const atCap = state.dwellers.length >= populationCap(state)
   const quarters = state.rooms.filter(r => ROOM_CATALOG[r.typeId].kind === 'housing')
   for (const q of quarters) {
     const inside: Dweller[] = []
@@ -32,22 +32,22 @@ export function tryPairingAndConceive(state: GameState, dwellerById: Map<string,
       pushLog(state, `${a.name} and ${b.name} paired up.`, 'good')
     }
 
+    if (atCap) continue
+
     for (const a of inside) {
       if (!a.partnerId) continue
       const b = dwellerById.get(a.partnerId)
       if (!b || b.isChild || b.status === 'pregnant') continue
       if (b.location !== q.id) continue
       if (a.id > b.id) continue
-      if (rand(state) < 0.08) {
-        state.pregnancies.push({
-          motherId: a.id,
-          fatherId: b.id,
-          ticksRemaining: PREGNANCY_TICKS,
-        })
-        a.status = 'pregnant'
-        pushLog(state, `${a.name} is pregnant!`, 'good')
-        return
-      }
+      state.pregnancies.push({
+        motherId: a.id,
+        fatherId: b.id,
+        ticksRemaining: PREGNANCY_TICKS,
+      })
+      a.status = 'pregnant'
+      pushLog(state, `${a.name} is pregnant!`, 'good')
+      return
     }
   }
 }

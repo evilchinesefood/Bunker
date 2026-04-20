@@ -534,7 +534,7 @@ button {
   border-top: 1px solid var(--border);
   background: var(--bg-1);
   padding: 8px 18px;
-  max-height: 130px;
+  max-height: 260px;
   overflow-y: auto;
   font-size: 12px;
 }

@@ -80,4 +80,4 @@ export const XP_PER_TICK = 0.5
 export const XP_TO_STAT = 60
 export const OFFLINE_XP_DAMPING = 0.25
 export const SHORTAGE_GRACE_TICKS = 30
-export const PREGNANCY_TICKS = 60 * 6
+export const PREGNANCY_TICKS = 60 * 3
