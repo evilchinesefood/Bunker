@@ -42,6 +42,18 @@ export function gearMenu(
           h('span', { class: 'gear-hint' }, 'toggle'),
         ),
         h(
+          'a',
+          {
+            class: 'gear-row',
+            href: 'https://github.com/evilchinesefood/Bunker',
+            target: '_blank',
+            rel: 'noopener noreferrer',
+          },
+          h('i', { class: 'fa-brands fa-github', 'aria-hidden': 'true' }),
+          h('span', {}, 'Source on GitHub'),
+          h('span', { class: 'gear-hint' }, 'github'),
+        ),
+        h(
           'button',
           {
             type: 'button',
@@ -54,6 +66,23 @@ export function gearMenu(
           icon('fa-rotate-left'),
           h('span', {}, 'Reset bunker'),
           h('span', { class: 'gear-hint' }, 'confirm'),
+        ),
+      ),
+      h(
+        'div',
+        { class: 'gear-credit' },
+        h(
+          'a',
+          {
+            class: 'credit',
+            href: 'https://jdayers.com/',
+            target: '_blank',
+            rel: 'noopener noreferrer',
+          },
+          '> made with ',
+          h('span', { class: 'heart' }, '❤'),
+          ' by david ayers',
+          h('span', { class: 'cursor' }, '_'),
         ),
       ),
     ),
